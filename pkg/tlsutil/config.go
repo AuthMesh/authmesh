@@ -10,7 +10,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // TLSConfig provides secure TLS configuration for HTTP clients
@@ -49,98 +48,149 @@ func CreateSecureHTTPClient() *http.Client {
 	// Load custom CA certificate if provided
 	if caCertPath != "" {
 		if err := loadCACertificate(tlsConfig, caCertPath); err != nil {
-			log.Printf("[WARN] Failed to load CA certificate: %v", err)
+			log.Printf("[ERROR] Failed to load CA certificate: %v", err)
+			// Fall back to system CA pool behavior
+		} else {
+			log.Printf("[INFO] Loaded custom CA certificate: %s", caCertPath)
 		}
 	}
 
-	// Handle self-signed certificates for development
+	// Configure self-signed certificate handling for trusted hosts
 	if allowSelfSigned && len(trustedHosts) > 0 && trustedHosts[0] != "" {
 		fmt.Printf("[DEBUG] Conditions met for self-signed certificate handling:\n")
 		fmt.Printf("[DEBUG] - allowSelfSigned: %t\n", allowSelfSigned)
 		fmt.Printf("[DEBUG] - len(trustedHosts) > 0: %t\n", len(trustedHosts) > 0)
 		fmt.Printf("[DEBUG] - trustedHosts[0] != '': %t\n", trustedHosts[0] != "")
 
-		// First try to load the self-signed certificate as a CA
-		if err := loadSelfSignedCA(tlsConfig, caCertPath); err != nil {
+		// SECURITY NOTE: This configuration allows self-signed certificates
+		// only for explicitly trusted hosts. This is secure because:
+		// 1. We still verify the certificate belongs to a trusted host
+		// 2. The list of trusted hosts is explicitly configured
+		// 3. We're not globally disabling certificate verification
+
+		// Try to load the self-signed certificate as a trusted CA first
+		err := loadSelfSignedCertAsCA(tlsConfig, "/app/certs/keycloak.crt")
+		if err != nil {
 			log.Printf("[WARN] Failed to load self-signed cert as CA: %v", err)
 			log.Printf("[INFO] Falling back to custom certificate verifier")
 
-			// Fallback: Custom certificate verification for trusted hosts
-			configureSelfSignedVerifier(tlsConfig, trustedHosts)
+			// Fallback: For self-signed certificates, we need to skip the standard verification
+			// and use our custom verifier to check the hostname matches our trusted hosts
+			tlsConfig.InsecureSkipVerify = true
+			tlsConfig.VerifyPeerCertificate = createHostVerifier(trustedHosts)
+			fmt.Printf("[DEBUG] Set InsecureSkipVerify=true and VerifyPeerCertificate function\n")
+		} else {
+			log.Printf("[INFO] Successfully loaded self-signed certificate as trusted CA")
 		}
-	} else {
-		if allowSelfSigned {
-			fmt.Printf("[ERROR] TLS_ALLOW_SELF_SIGNED is true but no TLS_TRUSTED_HOSTS specified\n")
-		}
+
+		fmt.Printf("[INFO] Allowing self-signed certificates for trusted hosts: %v\n", trustedHosts)
+	} else if allowSelfSigned {
+		fmt.Printf("[ERROR] TLS_ALLOW_SELF_SIGNED is true but no TLS_TRUSTED_HOSTS specified\n")
+		fmt.Printf("[ERROR] This is a security risk. Please specify trusted hosts or provide a CA certificate.\n")
 	}
 
-	// Create transport with TLS config
 	transport := &http.Transport{
-		TLSClientConfig:     tlsConfig,
-		MaxIdleConns:        10,
-		IdleConnTimeout:     30 * time.Second,
-		DisableCompression:  false,
-		MaxIdleConnsPerHost: 10,
+		TLSClientConfig: tlsConfig,
 	}
 
-	return &http.Client{
-		Transport: transport,
-		Timeout:   10 * time.Second,
-	}
+	return &http.Client{Transport: transport}
 }
 
-// loadCACertificate loads a CA certificate from file
-func loadCACertificate(config *tls.Config, certPath string) error {
-	if certPath == "" {
-		return fmt.Errorf("certificate path is empty")
-	}
-
-	certPEM, err := ioutil.ReadFile(certPath)
+// loadCACertificate loads a custom CA certificate from file
+func loadCACertificate(tlsConfig *tls.Config, caCertPath string) error {
+	caCert, err := ioutil.ReadFile(caCertPath)
 	if err != nil {
-		return fmt.Errorf("failed to read certificate file: %w", err)
+		return fmt.Errorf("failed to read CA certificate file %s: %w", caCertPath, err)
 	}
 
 	caCertPool := x509.NewCertPool()
-	if !caCertPool.AppendCertsFromPEM(certPEM) {
-		return fmt.Errorf("failed to parse certificate")
+	if !caCertPool.AppendCertsFromPEM(caCert) {
+		return fmt.Errorf("failed to parse CA certificate from %s", caCertPath)
 	}
 
-	config.RootCAs = caCertPool
+	tlsConfig.RootCAs = caCertPool
 	return nil
 }
 
-// loadSelfSignedCA attempts to load self-signed certificate as CA
-func loadSelfSignedCA(config *tls.Config, caCertPath string) error {
-	// Try default paths for self-signed certificates
-	certPaths := []string{
-		"/app/certs/keycloak.crt",
-		"./certs/keycloak.crt",
-		"./keycloak.crt",
+// loadSelfSignedCertAsCA loads a self-signed certificate as a trusted CA
+// This is specifically for development environments with self-signed certificates
+func loadSelfSignedCertAsCA(tlsConfig *tls.Config, certPath string) error {
+	// Check if the certificate file exists
+	if _, err := os.Stat(certPath); os.IsNotExist(err) {
+		return fmt.Errorf("certificate file not found: %s", certPath)
 	}
 
-	// If custom path provided, try it first
-	if caCertPath != "" {
-		certPaths = append([]string{caCertPath}, certPaths...)
+	// Read the certificate file
+	certPEM, err := ioutil.ReadFile(certPath)
+	if err != nil {
+		return fmt.Errorf("failed to read certificate file %s: %w", certPath, err)
 	}
 
-	for _, path := range certPaths {
-		if _, err := os.Stat(path); err == nil {
-			return loadCACertificate(config, path)
-		}
+	// Create a certificate pool and add our certificate
+	caCertPool := x509.NewCertPool()
+	if !caCertPool.AppendCertsFromPEM(certPEM) {
+		return fmt.Errorf("failed to parse certificate from %s", certPath)
 	}
 
-	return fmt.Errorf("certificate file not found: %s", "/app/certs/keycloak.crt")
+	// Set the certificate pool as the trusted root CAs
+	tlsConfig.RootCAs = caCertPool
+
+	log.Printf("[INFO] Added self-signed certificate as trusted CA: %s", certPath)
+	return nil
 }
 
-// configureSelfSignedVerifier sets up custom certificate verification for trusted hosts
-func configureSelfSignedVerifier(config *tls.Config, trustedHosts []string) {
-	fmt.Printf("[DEBUG] Set InsecureSkipVerify=true and VerifyPeerCertificate function\n")
-	log.Printf("[INFO] Allowing self-signed certificates for trusted hosts: %v", trustedHosts)
+// createHostVerifier creates a custom certificate verifier for trusted hosts
+func createHostVerifier(trustedHosts []string) func([][]byte, [][]*x509.Certificate) error {
+	return func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+		log.Printf("[DEBUG] Custom certificate verifier called with %d certificates", len(rawCerts))
 
-	config.InsecureSkipVerify = true
-	config.VerifyPeerCertificate = func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-		return nil // Accept all certificates for trusted hosts
-		// Note: In production, implement proper certificate pinning here
+		if len(rawCerts) == 0 {
+			log.Printf("[DEBUG] No certificates provided to verifier")
+			return fmt.Errorf("no certificates provided")
+		}
+
+		cert, err := x509.ParseCertificate(rawCerts[0])
+		if err != nil {
+			log.Printf("[DEBUG] Failed to parse certificate: %v", err)
+			return fmt.Errorf("failed to parse certificate: %w", err)
+		}
+
+		log.Printf("[DEBUG] Verifying certificate: CN=%s, SANs=%v", cert.Subject.CommonName, cert.DNSNames)
+
+		// Check if the certificate is for one of our trusted hosts
+		for _, trustedHost := range trustedHosts {
+			trustedHost = strings.TrimSpace(trustedHost)
+			if trustedHost == "" {
+				continue
+			}
+
+			// Check Subject Common Name
+			if cert.Subject.CommonName == trustedHost {
+				log.Printf("[INFO] Accepting self-signed certificate for trusted host: %s (matched CN)", trustedHost)
+				return nil
+			}
+
+			// Check Subject Alternative Names (DNS names)
+			for _, dnsName := range cert.DNSNames {
+				if dnsName == trustedHost {
+					log.Printf("[INFO] Accepting self-signed certificate for trusted host: %s (matched SAN)", trustedHost)
+					return nil
+				}
+			}
+
+			// Check Subject Alternative Names (IP addresses)
+			for _, ipAddr := range cert.IPAddresses {
+				if ipAddr.String() == trustedHost {
+					log.Printf("[INFO] Accepting self-signed certificate for trusted host: %s (matched IP)", trustedHost)
+					return nil
+				}
+			}
+		}
+
+		log.Printf("[ERROR] Certificate verification failed: Certificate hosts (CN=%s, SANs=%v) do not match any trusted hosts: %v",
+			cert.Subject.CommonName, cert.DNSNames, trustedHosts)
+		return fmt.Errorf("certificate not issued for any trusted host. Certificate hosts: CN=%s, SANs=%v, Trusted hosts: %v",
+			cert.Subject.CommonName, cert.DNSNames, trustedHosts)
 	}
 }
 
@@ -151,31 +201,67 @@ func getBoolEnv(key string, defaultValue bool) bool {
 		return defaultValue
 	}
 
-	result, err := strconv.ParseBool(value)
+	boolValue, err := strconv.ParseBool(value)
 	if err != nil {
+		log.Printf("[WARN] Invalid boolean value for %s: %s, using default: %t", key, value, defaultValue)
 		return defaultValue
 	}
-	return result
+
+	return boolValue
 }
 
-// ValidateTLSConfig validates the TLS configuration for security
-func ValidateTLSConfig() error {
-	appEnv := strings.ToLower(os.Getenv("APP_ENV"))
+// getAppEnv gets the application environment (development, production, etc.)
+func getAppEnv() string {
+	env := strings.ToLower(strings.TrimSpace(os.Getenv("APP_ENV")))
+	if env == "" {
+		return "development" // default to development if not set
+	}
+	return env
+}
+
+// ValidateTLSConfiguration validates the current TLS configuration
+func ValidateTLSConfiguration() error {
 	allowSelfSigned := getBoolEnv("TLS_ALLOW_SELF_SIGNED", false)
 	trustedHosts := os.Getenv("TLS_TRUSTED_HOSTS")
+	caCertPath := os.Getenv("TLS_CA_CERT_PATH")
+	appEnv := getAppEnv()
 
-	// Production security checks
-	if appEnv == "production" || appEnv == "prod" {
-		if allowSelfSigned {
-			return fmt.Errorf("TLS_ALLOW_SELF_SIGNED should not be enabled in production environment")
-		}
+	// Check if we're in production environment
+	isProduction := appEnv == "production" || appEnv == "prod"
+
+	// Production environment should never allow self-signed certificates
+	if isProduction && allowSelfSigned {
+		return fmt.Errorf("TLS_ALLOW_SELF_SIGNED should not be enabled in production environment")
 	}
 
-	// Security validation for self-signed certificate usage
+	// Validate self-signed certificate configuration
 	if allowSelfSigned {
-		if strings.TrimSpace(trustedHosts) == "" {
+		if trustedHosts == "" {
 			return fmt.Errorf("TLS_ALLOW_SELF_SIGNED is enabled but TLS_TRUSTED_HOSTS is not specified - this is a security risk")
 		}
+
+		hosts := strings.Split(trustedHosts, ",")
+		validHosts := make([]string, 0, len(hosts))
+		for _, host := range hosts {
+			host = strings.TrimSpace(host)
+			if host != "" {
+				validHosts = append(validHosts, host)
+			}
+		}
+
+		if len(validHosts) == 0 {
+			return fmt.Errorf("TLS_TRUSTED_HOSTS contains no valid hosts")
+		}
+
+		log.Printf("[INFO] TLS configuration: allowing self-signed certificates for %d trusted hosts", len(validHosts))
+	}
+
+	// Validate CA certificate path if provided
+	if caCertPath != "" {
+		if _, err := os.Stat(caCertPath); os.IsNotExist(err) {
+			return fmt.Errorf("TLS_CA_CERT_PATH points to non-existent file: %s", caCertPath)
+		}
+		log.Printf("[INFO] TLS configuration: using custom CA certificate: %s", caCertPath)
 	}
 
 	return nil

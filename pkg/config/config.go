@@ -135,7 +135,7 @@ func Load() *Config {
 		RateLimitTenantPerSecond: rateLimitTenantPerSecond,
 		RateLimitTenantBurst:     rateLimitTenantBurst,
 		RateLimitMessage:         rateLimitMessage,
-		TrustedIssuers:     trustedIssuers,
+		TrustedIssuers:           trustedIssuers,
 
 		FrontendURL: frontendURL,
 

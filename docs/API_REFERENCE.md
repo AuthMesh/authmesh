@@ -6,17 +6,20 @@ AuthMesh provides a comprehensive API for multi-tenant authentication and author
 
 ## Core Package: `platform`
 
-### QuickStart
+### NewWithDefaults
 
-The simplest way to get started with AuthMesh.
+The simplest way to get started with AuthMesh for development.
 
 ```go
-func QuickStart(appName string) (*Platform, error)
+func NewWithDefaults(keycloakURL, redisURL string) (*Platform, error)
 ```
 
 **Example:**
 ```go
-authMesh, err := platform.QuickStart("myapp")
+authMesh, err := platform.NewWithDefaults(
+    "http://localhost:9443",  // Keycloak URL
+    "redis://localhost:6379", // Redis URL
+)
 if err != nil {
     log.Fatal(err)
 }
@@ -27,26 +30,23 @@ authMesh.SetupAll(router)
 
 ### Constructors
 
-#### NewWithDefaults
+#### New
 
 ```go
-func NewWithDefaults(appName string, opts ...Option) (*Platform, error)
+func New(cfg Config) (*Platform, error)
 ```
 
-Creates a platform with sensible defaults and optional customizations.
+Creates a platform with full configuration control.
 
 **Example:**
 ```go
-authMesh, err := platform.NewWithDefaults("myapp",
-    platform.WithKeycloak("https://auth.example.com"),
-    platform.WithRateLimiting(platform.RateLimitConfig{
-        Global:  1000,
-        PerUser: 100,
-    }),
-)
+config := platform.DefaultConfig()
+config.Keycloak.URL = "https://auth.example.com"
+config.Redis.URL = "redis://redis-cluster:6379"
+authMesh, err := platform.New(config)
 ```
 
-#### NewWithObservability
+#### NewForTesting
 
 ```go
 func NewWithObservability(appName string, config Config) (*Platform, error)

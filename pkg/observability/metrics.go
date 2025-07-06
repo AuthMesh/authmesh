@@ -1,7 +1,6 @@
 package observability
 
 import (
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -9,202 +8,124 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-// Metrics holds all the Prometheus metrics
+// Metrics holds all Prometheus metrics
 type Metrics struct {
-	RequestsTotal    *prometheus.CounterVec
-	RequestDuration  *prometheus.HistogramVec
-	ActiveRequests   *prometheus.GaugeVec
-	ResponseSize     *prometheus.HistogramVec
-	AuthAttempts     *prometheus.CounterVec
-	TokenValidations *prometheus.CounterVec
-	RateLimitHits    *prometheus.CounterVec
+	RequestDuration prometheus.HistogramVec
+	RequestsTotal   prometheus.CounterVec
+	ActiveRequests  prometheus.GaugeVec
 }
 
-// NewMetrics creates and registers Prometheus metrics
+// NewMetrics creates a new Metrics instance
 func NewMetrics() *Metrics {
 	m := &Metrics{
-		RequestsTotal: prometheus.NewCounterVec(
+		RequestDuration: *prometheus.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name: "http_request_duration_seconds",
+				Help: "Duration of HTTP requests in seconds",
+			},
+			[]string{"method", "path", "status_code"},
+		),
+		RequestsTotal: *prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "http_requests_total",
 				Help: "Total number of HTTP requests",
 			},
-			[]string{"method", "path", "status", "tenant_id"},
+			[]string{"method", "path", "status_code"},
 		),
-		RequestDuration: prometheus.NewHistogramVec(
-			prometheus.HistogramOpts{
-				Name:    "http_request_duration_seconds",
-				Help:    "HTTP request duration in seconds",
-				Buckets: prometheus.DefBuckets,
-			},
-			[]string{"method", "path", "status", "tenant_id"},
-		),
-		ActiveRequests: prometheus.NewGaugeVec(
+		ActiveRequests: *prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: "http_requests_active",
+				Name: "http_active_requests",
 				Help: "Number of active HTTP requests",
 			},
-			[]string{"method", "path", "tenant_id"},
-		),
-		ResponseSize: prometheus.NewHistogramVec(
-			prometheus.HistogramOpts{
-				Name:    "http_response_size_bytes",
-				Help:    "HTTP response size in bytes",
-				Buckets: []float64{100, 1000, 10000, 100000, 1000000},
-			},
-			[]string{"method", "path", "status", "tenant_id"},
-		),
-		AuthAttempts: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "auth_attempts_total",
-				Help: "Total number of authentication attempts",
-			},
-			[]string{"result", "tenant_id", "realm"},
-		),
-		TokenValidations: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "token_validations_total",
-				Help: "Total number of token validations",
-			},
-			[]string{"result", "tenant_id", "realm"},
-		),
-		RateLimitHits: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "rate_limit_hits_total",
-				Help: "Total number of rate limit hits",
-			},
-			[]string{"type", "tenant_id"},
+			[]string{"method", "path"},
 		),
 	}
 
-	// Register metrics safely (ignore errors if already registered)
-	prometheus.Register(m.RequestsTotal)
-	prometheus.Register(m.RequestDuration)
-	prometheus.Register(m.ActiveRequests)
-	prometheus.Register(m.ResponseSize)
-	prometheus.Register(m.AuthAttempts)
-	prometheus.Register(m.TokenValidations)
-	prometheus.Register(m.RateLimitHits)
+	// Register metrics
+	prometheus.MustRegister(&m.RequestDuration)
+	prometheus.MustRegister(&m.RequestsTotal)
+	prometheus.MustRegister(&m.ActiveRequests)
 
 	return m
 }
 
-// Global metrics instance
-var defaultMetrics = NewMetrics()
-
-// GetDefaultMetrics returns the default metrics instance
-func GetDefaultMetrics() *Metrics {
-	return defaultMetrics
+// NewHealthMetrics creates health-related metrics
+func NewHealthMetrics(appName, appVersion string) {
+	info := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "app_info",
+			Help: "Application information",
+		},
+		[]string{"app_name", "version"},
+	)
+	
+	info.WithLabelValues(appName, appVersion).Set(1)
+	prometheus.MustRegister(info)
 }
 
-// MetricsMiddleware creates a middleware that records HTTP metrics
-func MetricsMiddleware(metrics *Metrics) gin.HandlerFunc {
+// MetricsMiddleware returns a middleware that records metrics
+func MetricsMiddleware(m *Metrics) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
-		
-		// Get tenant ID for metrics labeling
-		tenantID := c.GetString("tenant_id")
-		if tenantID == "" {
-			tenantID = "unknown"
+		path := c.FullPath()
+		if path == "" {
+			path = c.Request.URL.Path
 		}
 
-		// Track active requests
-		metrics.ActiveRequests.WithLabelValues(
-			c.Request.Method,
-			c.FullPath(),
-			tenantID,
-		).Inc()
+		// Increment active requests
+		m.ActiveRequests.WithLabelValues(c.Request.Method, path).Inc()
 
+		// Process request
 		c.Next()
 
-		// Record metrics after request completion
+		// Record metrics
 		duration := time.Since(start).Seconds()
-		status := strconv.Itoa(c.Writer.Status())
-		
-		labels := []string{c.Request.Method, c.FullPath(), status, tenantID}
-		
-		metrics.RequestsTotal.WithLabelValues(labels...).Inc()
-		metrics.RequestDuration.WithLabelValues(labels...).Observe(duration)
-		metrics.ResponseSize.WithLabelValues(labels...).Observe(float64(c.Writer.Size()))
-		
-		// Decrement active requests
-		metrics.ActiveRequests.WithLabelValues(
-			c.Request.Method,
-			c.FullPath(),
-			tenantID,
-		).Dec()
+		statusCode := string(rune(c.Writer.Status()))
+
+		m.RequestDuration.WithLabelValues(c.Request.Method, path, statusCode).Observe(duration)
+		m.RequestsTotal.WithLabelValues(c.Request.Method, path, statusCode).Inc()
+		m.ActiveRequests.WithLabelValues(c.Request.Method, path).Dec()
 	}
 }
 
-// DefaultMetricsMiddleware creates a middleware using the default metrics instance
-func DefaultMetricsMiddleware() gin.HandlerFunc {
-	return MetricsMiddleware(defaultMetrics)
-}
-
-// RecordAuthAttempt records an authentication attempt
-func (m *Metrics) RecordAuthAttempt(result, tenantID, realm string) {
-	m.AuthAttempts.WithLabelValues(result, tenantID, realm).Inc()
-}
-
-// RecordTokenValidation records a token validation
-func (m *Metrics) RecordTokenValidation(result, tenantID, realm string) {
-	m.TokenValidations.WithLabelValues(result, tenantID, realm).Inc()
-}
-
-// RecordRateLimitHit records a rate limit hit
-func (m *Metrics) RecordRateLimitHit(limitType, tenantID string) {
-	m.RateLimitHits.WithLabelValues(limitType, tenantID).Inc()
-}
-
-// MetricsHandler returns the Prometheus metrics handler
-func MetricsHandler() gin.HandlerFunc {
-	h := promhttp.Handler()
-	return gin.WrapH(h)
-}
-
-// SetupMetricsEndpoint adds the /metrics endpoint to a Gin router
+// SetupMetricsEndpoint sets up the /metrics endpoint
 func SetupMetricsEndpoint(router *gin.Engine) {
-	router.GET("/metrics", MetricsHandler())
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 }
 
-// HealthMetrics provides health check metrics
-type HealthMetrics struct {
-	AppInfo *prometheus.GaugeVec
-	Uptime  prometheus.Gauge
+// TracingConfig represents tracing configuration
+type TracingConfig struct {
+	ServiceName    string  `json:"service_name"`
+	ServiceVersion string  `json:"service_version"`
+	Environment    string  `json:"environment"`
+	JaegerURL      string  `json:"jaeger_url"`
+	OTLPEndpoint   string  `json:"otlp_endpoint"`
+	SampleRate     float64 `json:"sample_rate"`
+	Enabled        bool    `json:"enabled"`
 }
 
-// NewHealthMetrics creates health-related metrics
-func NewHealthMetrics(appName, version string) *HealthMetrics {
-	hm := &HealthMetrics{
-		AppInfo: prometheus.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "app_info",
-				Help: "Application information",
-			},
-			[]string{"name", "version"},
-		),
-		Uptime: prometheus.NewGauge(
-			prometheus.GaugeOpts{
-				Name: "app_uptime_seconds",
-				Help: "Application uptime in seconds",
-			},
-		),
+// TracingProvider represents a tracing provider
+type TracingProvider struct {
+	config TracingConfig
+}
+
+// NewTracingProvider creates a new tracing provider
+func NewTracingProvider(config TracingConfig) (*TracingProvider, error) {
+	return &TracingProvider{
+		config: config,
+	}, nil
+}
+
+// TracingMiddleware returns a tracing middleware
+func (tp *TracingProvider) TracingMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// For now, just pass through - can be enhanced later
+		c.Next()
 	}
+}
 
-	// Set app info
-	hm.AppInfo.WithLabelValues(appName, version).Set(1)
-
-	// Register metrics safely
-	prometheus.Register(hm.AppInfo)
-	prometheus.Register(hm.Uptime)
-
-	// Start uptime tracking
-	startTime := time.Now()
-	go func() {
-		for {
-			hm.Uptime.Set(time.Since(startTime).Seconds())
-			time.Sleep(time.Second)
-		}
-	}()
-
-	return hm
+// Shutdown shuts down the tracing provider
+func (tp *TracingProvider) Shutdown(ctx interface{}) error {
+	// No-op for now
+	return nil
 }

@@ -11,9 +11,14 @@ AuthMesh is a high-performance, batteries-included authentication and authorizat
 
 ## ✨ Quick Start
 
+> **🚀 New to AuthMesh?** Follow our [5-minute QuickStart Guide](docs/QUICKSTART.md) for step-by-step setup.
+
 ```go
-// 1. Initialize AuthMesh (sub-microsecond startup)
-authMesh, err := platform.QuickStart("myapp")
+// 1. Initialize AuthMesh with defaults
+authMesh, err := platform.NewWithDefaults(
+    "http://localhost:9443",  // Keycloak URL
+    "redis://localhost:6379", // Redis URL
+)
 if err != nil {
     log.Fatal(err)
 }
@@ -46,9 +51,9 @@ That's it! You now have:
 
 **With AuthMesh:** Simple, secure, performant
 ```go
-authMesh, _ := platform.QuickStart("myapp")
+authMesh, _ := platform.NewWithDefaults("http://localhost:9443", "redis://localhost:6379")
 authMesh.SetupAll(router)
-// ✅ Production-ready with 5 lines
+// ✅ Production-ready with 3 lines
 ```
 
 ## 🚀 Features
@@ -91,13 +96,11 @@ authMesh.SetupAll(router)
 - Hot reload support with Air
 - VS Code dev container included
 
-� **Enhanced Security** ⭐ *Stage 2*
+🛡️ **Enhanced Security**
 - CORS configuration with advanced options
 - Security headers (HSTS, CSP, X-Frame-Options, etc.)
 - Request/response sanitization
 - Recovery middleware with structured logging
-
-�🚀 **Developer Experience**
 - Simple, unified API
 - Gin middleware integration
 - Comprehensive examples and documentation
@@ -124,8 +127,11 @@ import (
 )
 
 func main() {
-    // Stage 3: Unified API - One line setup
-    authMesh, err := platform.QuickStart("my-service")
+    // Simple setup with defaults
+    authMesh, err := platform.NewWithDefaults(
+        "http://localhost:9443",  // Keycloak URL  
+        "redis://localhost:6379", // Redis URL
+    )
     if err != nil {
         log.Fatal(err)
     }
@@ -144,32 +150,25 @@ func main() {
 }
 ```
 
-### Advanced Configuration ⭐ *Stage 3*
+### Advanced Configuration
 
 Choose the setup method that fits your needs:
 
 ```go
 // Quick start for demos and development
-authMesh, err := platform.QuickStart("my-service")
+authMesh, err := platform.NewWithDefaults(
+    "http://localhost:9443",  // Keycloak URL
+    "redis://localhost:6379", // Redis URL
+)
 
 // Production setup with custom configuration
 config := platform.DefaultConfig()
 config.Keycloak.URL = "https://auth.company.com"
 config.Redis.URL = "redis://redis-cluster:6379"
-authMesh, err := platform.NewProduction(config)
+authMesh, err := platform.New(config)
 
-// Simple setup with observability
-authMesh, err := platform.NewWithObservability(
-    "https://keycloak:9443",
-    "redis://redis:6379", 
-    "my-service",
-)
-
-// Basic setup
-authMesh, err := platform.NewWithDefaults(
-    "http://localhost:9443",
-    "redis://localhost:6379",
-)
+// Testing setup (no external dependencies)
+authMesh, err := platform.NewForTesting("my-service")
 ```
     config.Keycloak.Realm = "your-realm"
     
@@ -257,7 +256,7 @@ config := platform.Config{
 }
 ```
 
-### Advanced Observability Configuration ⭐ *Stage 2*
+### Advanced Observability Configuration
 
 AuthMesh provides comprehensive observability features with minimal configuration:
 
@@ -305,7 +304,7 @@ func myHandler(c *gin.Context) {
 }
 ```
 
-## Quick Start with Full Observability Stack ⭐ *Stage 2*
+## Quick Start with Full Observability Stack
 
 Run the complete example with Keycloak, Redis, Prometheus, Grafana, and Jaeger:
 
@@ -370,11 +369,11 @@ curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \
 
 - **`pkg/auth`**: JWT validation, user management, RBAC
 - **`pkg/middleware`**: Security, CORS, logging, recovery
-- **`pkg/observability`**: Metrics, tracing, health checks ⭐ *Enhanced*
+- **`pkg/observability`**: Metrics, tracing, health checks
 - **`pkg/platform`**: Unified API that combines all components
 - **`pkg/config`**: Configuration management
 - **`pkg/keycloak`**: Keycloak integration
-- **`pkg/ratelimit`**: Distributed Redis-based rate limiting ⭐ *Enhanced*
+- **`pkg/ratelimit`**: Distributed Redis-based rate limiting
 - **`pkg/tlsutil`**: TLS configuration utilities
 
 ### Multi-Tenant Support
@@ -392,7 +391,7 @@ router.Group("/t/:tenant_id").Use(
 router.Group("/admin").Use(authMesh.SuperAdminMiddleware())
 ```
 
-### Enhanced Observability ⭐ *Stage 2*
+### Enhanced Observability
 
 Comprehensive monitoring and tracing:
 
@@ -435,18 +434,18 @@ func businessHandler(c *gin.Context) {
     c.JSON(200, result)
 }
 
-## Examples ⭐ *Enhanced in Stage 3*
+## Examples
 
 Check the `examples/` directory for complete working examples:
 
-- **`simple-app/`**: Stage 3 unified API demonstration (5 lines of setup)
+- **`simple-app/`**: Unified API demonstration (5 lines of setup)
 - **`basic-app/`**: Comprehensive setup with full observability stack  
 - **`advanced-app/`**: Advanced features and custom middleware
 - **`migration-examples/`**: Migration guides from other auth libraries
 
 ### API Evolution
 
-**Stage 1-2**: Detailed configuration (40+ lines)
+**Detailed Configuration** (when you need full control):
 ```go
 config := platform.DefaultConfig()
 config.Keycloak.URL = "http://localhost:9443"
@@ -454,22 +453,25 @@ config.Redis.URL = "redis://localhost:6379"
 config.Observability.AppName = "my-app"
 config.Observability.EnableMetrics = true
 config.Observability.EnableTracing = true
-// ... 30+ more configuration lines
+// ... additional configuration as needed
 authMesh, err := platform.New(config)
 router := gin.Default()
 authMesh.SetupMiddleware(router)
 authMesh.SetupRoutes(router)
 ```
 
-**Stage 3**: Unified API (5 lines)
+**Unified API** (quick setup):
 ```go
-authMesh, err := platform.QuickStart("my-app")
+authMesh, err := platform.NewWithDefaults(
+    "http://localhost:9443", 
+    "redis://localhost:6379",
+)
 defer authMesh.Shutdown(context.Background())
 router := gin.Default()
 authMesh.SetupAll(router)
 ```
 
-## Testing ⭐ *New in Stage 3*
+## Testing
 
 ### Unit Tests
 ```bash
@@ -540,11 +542,16 @@ AuthMesh is built for production with:
 
 Apache 2.0 License - see [LICENSE](LICENSE) for details.
 
-## Support
+## Support & Documentation
 
-- 📖 [Documentation](docs/)
-- 🐛 [Issue Tracker](https://github.com/AuthMesh/authmesh/issues)
-- 💬 [Discussions](https://github.com/AuthMesh/authmesh/discussions)
+- 📚 **[Quick Start Guide](docs/QUICKSTART.md)** - Get running in 5 minutes
+- 📖 **[Full Documentation](docs/)** - Complete guides and references
+- 🛡️ **[Security Guide](docs/SECURITY.md)** - Production security practices
+- ⚡ **[Performance Guide](docs/PERFORMANCE.md)** - Optimization and benchmarks
+- 🔄 **[Migration Guide](docs/MIGRATION.md)** - Migrate from other auth systems
+- � **[API Reference](docs/API_REFERENCE.md)** - Complete API documentation
+- �🐛 **[Issue Tracker](https://github.com/AuthMesh/authmesh/issues)** - Bug reports and feature requests
+- 💬 **[Discussions](https://github.com/AuthMesh/authmesh/discussions)** - Community support
 
 ---
 
