@@ -1,53 +1,230 @@
 package middleware
 
 import (
-	"context"
+	"context" 
 	"fmt"
 	"net/http"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // LoggingConfig represents logging middleware configuration
 type LoggingConfig struct {
-	EnableRequestLogging  bool `json:"enable_request_logging"`
-	EnableResponseLogging bool `json:"enable_response_logging"`
-	SkipPaths            []string `json:"skip_paths"`
+	Logger         *zap.Logger
+	SkipPaths      []string
+	EnableBody     bool
+	EnableHeaders  bool
+	MaxBodySize    int64
 }
 
 // DefaultLoggingConfig returns a default logging configuration
 func DefaultLoggingConfig() LoggingConfig {
+	logger, _ := zap.NewProduction()
 	return LoggingConfig{
-		EnableRequestLogging:  true,
-		EnableResponseLogging: true,
-		SkipPaths: []string{
-			"/health",
-			"/ready",
-			"/metrics",
-		},
+		Logger:        logger,
+		SkipPaths:     []string{"/health", "/metrics", "/ping"},
+		EnableBody:    false,
+		EnableHeaders: false,
+		MaxBodySize:   1024, // 1KB
 	}
 }
 
-// RequestLoggingMiddleware logs HTTP requests
-func RequestLoggingMiddleware(config LoggingConfig) gin.HandlerFunc {
-	return gin.LoggerWithConfig(gin.LoggerConfig{
-		Formatter: func(param gin.LogFormatterParams) string {
-			return fmt.Sprintf("[%s] %s %s %d %s %s\n",
-				param.TimeStamp.Format("2006-01-02 15:04:05"),
-				param.Method,
-				param.Path,
-				param.StatusCode,
-				param.Latency,
-				param.ClientIP,
-			)
-		},
-		SkipPaths: config.SkipPaths,
+// StructuredLoggingMiddleware provides structured request/response logging
+func StructuredLoggingMiddleware(config LoggingConfig) gin.HandlerFunc {
+	return gin.HandlerFunc(func(c *gin.Context) {
+		start := time.Now()
+		path := c.Request.URL.Path
+
+		// Skip logging for certain paths
+		for _, skipPath := range config.SkipPaths {
+			if path == skipPath {
+				c.Next()
+				return
+			}
+		}
+
+		// Process request
+		c.Next()
+
+		// Calculate latency
+		latency := time.Since(start)
+
+		// Get client IP
+		clientIP := c.ClientIP()
+
+		// Build log fields
+		fields := []zapcore.Field{
+			zap.String("method", c.Request.Method),
+			zap.String("path", path),
+			zap.String("query", c.Request.URL.RawQuery),
+			zap.Int("status", c.Writer.Status()),
+			zap.Duration("latency", latency),
+			zap.String("client_ip", clientIP),
+			zap.String("user_agent", c.Request.UserAgent()),
+			zap.Int("body_size", c.Writer.Size()),
+		}
+
+		// Add request ID if available
+		if requestID, exists := c.Get("request_id"); exists {
+			fields = append(fields, zap.String("request_id", requestID.(string)))
+		}
+
+		// Add tenant ID if available
+		if tenantID, exists := c.Get("tenant_id"); exists {
+			fields = append(fields, zap.String("tenant_id", tenantID.(string)))
+		}
+
+		// Add user ID if available
+		if userID, exists := c.Get("user_id"); exists {
+			fields = append(fields, zap.String("user_id", userID.(string)))
+		}
+
+		// Add error information if request failed
+		if len(c.Errors) > 0 {
+			fields = append(fields, zap.String("errors", c.Errors.String()))
+		}
+
+		// Add headers if enabled (be careful with sensitive data)
+		if config.EnableHeaders {
+			headers := make(map[string]string)
+			for name, values := range c.Request.Header {
+				if len(values) > 0 && !isSensitiveHeader(name) {
+					headers[name] = values[0]
+				}
+			}
+			if len(headers) > 0 {
+				fields = append(fields, zap.Any("headers", headers))
+			}
+		}
+
+		// Log with appropriate level based on status code
+		switch {
+		case c.Writer.Status() >= 500:
+			config.Logger.Error("HTTP request completed", fields...)
+		case c.Writer.Status() >= 400:
+			config.Logger.Warn("HTTP request completed", fields...)
+		default:
+			config.Logger.Info("HTTP request completed", fields...)
+		}
 	})
 }
 
-// RecoveryMiddleware handles panics and returns a proper error response
+// AuditLoggingMiddleware provides detailed audit logging for sensitive operations
+func AuditLoggingMiddleware(logger *zap.Logger) gin.HandlerFunc {
+	return gin.HandlerFunc(func(c *gin.Context) {
+		start := time.Now()
+
+		// Only log for non-GET requests or admin paths
+		if c.Request.Method != "GET" || isAdminPath(c.Request.URL.Path) {
+			// Log request details
+			logger.Info("Audit: Request initiated",
+				zap.String("method", c.Request.Method),
+				zap.String("path", c.Request.URL.Path),
+				zap.String("client_ip", c.ClientIP()),
+				zap.String("user_agent", c.Request.UserAgent()),
+				zap.Time("timestamp", start),
+			)
+		}
+
+		c.Next()
+
+		// Log completion for audited requests
+		if c.Request.Method != "GET" || isAdminPath(c.Request.URL.Path) {
+			latency := time.Since(start)
+			
+			fields := []zapcore.Field{
+				zap.String("method", c.Request.Method),
+				zap.String("path", c.Request.URL.Path),
+				zap.Int("status", c.Writer.Status()),
+				zap.Duration("latency", latency),
+				zap.String("client_ip", c.ClientIP()),
+			}
+
+			// Add context information
+			if requestID, exists := c.Get("request_id"); exists {
+				fields = append(fields, zap.String("request_id", requestID.(string)))
+			}
+			if tenantID, exists := c.Get("tenant_id"); exists {
+				fields = append(fields, zap.String("tenant_id", tenantID.(string)))
+			}
+			if userID, exists := c.Get("user_id"); exists {
+				fields = append(fields, zap.String("user_id", userID.(string)))
+			}
+
+			logger.Info("Audit: Request completed", fields...)
+		}
+	})
+}
+
+// RequestLoggingMiddleware provides simple request logging (deprecated - use StructuredLoggingMiddleware)
+func RequestLoggingMiddleware() gin.HandlerFunc {
+	return gin.Logger()
+}
+
+// RecoveryWithLoggingMiddleware handles panics and returns a proper error response
+func RecoveryWithLoggingMiddleware(logger *zap.Logger) gin.HandlerFunc {
+	return gin.CustomRecovery(func(c *gin.Context, recovered interface{}) {
+		if requestID, exists := c.Get("request_id"); exists {
+			c.Header("X-Request-ID", requestID.(string))
+		}
+		
+		// Log the panic
+		logger.Error("Panic recovered",
+			zap.Any("panic", recovered),
+			zap.String("path", c.Request.URL.Path),
+			zap.String("method", c.Request.Method),
+			zap.String("client_ip", c.ClientIP()),
+		)
+		
+		c.JSON(500, gin.H{
+			"error":      "Internal server error",
+			"request_id": c.GetHeader("X-Request-ID"),
+		})
+	})
+}
+
+// isSensitiveHeader checks if a header contains sensitive information
+func isSensitiveHeader(name string) bool {
+	sensitive := []string{
+		"authorization",
+		"cookie",
+		"x-api-key",
+		"x-auth-token",
+		"x-session-id",
+	}
+	
+	lowerName := strings.ToLower(name)
+	for _, s := range sensitive {
+		if lowerName == s {
+			return true
+		}
+	}
+	return false
+}
+
+// isAdminPath checks if the path is an administrative endpoint
+func isAdminPath(path string) bool {
+	adminPaths := []string{
+		"/admin",
+		"/api/admin",
+		"/api/v1/admin",
+		"/superadmin",
+		"/api/superadmin",
+		"/api/v1/superadmin",
+	}
+	
+	for _, adminPath := range adminPaths {
+		if strings.HasPrefix(path, adminPath) {
+			return true
+		}
+	}
+	return false
+}
 func RecoveryMiddleware() gin.HandlerFunc {
 	return gin.CustomRecovery(func(c *gin.Context, recovered interface{}) {
 		// Log the panic

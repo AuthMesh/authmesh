@@ -1,7 +1,9 @@
 package platform
 
 import (
+	"fmt"
 	"time"
+	"context"
 
 	"github.com/AuthMesh/authmesh/pkg/auth"
 	"github.com/AuthMesh/authmesh/pkg/middleware"
@@ -9,6 +11,7 @@ import (
 	"github.com/AuthMesh/authmesh/pkg/ratelimit"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 )
 
 // Config represents the unified platform configuration
@@ -69,6 +72,17 @@ type ObservabilityConfig struct {
 	EnableTracing bool   `json:"enable_tracing"`
 	AppName      string `json:"app_name"`
 	AppVersion   string `json:"app_version"`
+	TracingConfig TracingConfig `json:"tracing"`
+}
+
+// TracingConfig represents tracing configuration
+type TracingConfig struct {
+	ServiceName    string  `json:"service_name"`
+	ServiceVersion string  `json:"service_version"`
+	Environment    string  `json:"environment"`
+	JaegerURL      string  `json:"jaeger_url"`
+	OTLPEndpoint   string  `json:"otlp_endpoint"`
+	SampleRate     float64 `json:"sample_rate"`
 }
 
 // Platform represents the unified authentication platform
@@ -77,6 +91,7 @@ type Platform struct {
 	jwksRegistry *auth.JWKSRegistry
 	redisClient  *redis.Client
 	metrics      *observability.Metrics
+	tracing      *observability.TracingProvider
 }
 
 // New creates a new Platform instance with the given configuration
@@ -117,6 +132,36 @@ func New(cfg Config) (*Platform, error) {
 				cfg.Observability.AppName,
 				cfg.Observability.AppVersion,
 			)
+		}
+	}
+
+	// Initialize tracing if enabled
+	if cfg.Observability.EnableTracing {
+		tracingConfig := observability.TracingConfig{
+			ServiceName:    cfg.Observability.TracingConfig.ServiceName,
+			ServiceVersion: cfg.Observability.TracingConfig.ServiceVersion,
+			Environment:    cfg.Observability.TracingConfig.Environment,
+			JaegerURL:      cfg.Observability.TracingConfig.JaegerURL,
+			OTLPEndpoint:   cfg.Observability.TracingConfig.OTLPEndpoint,
+			SampleRate:     cfg.Observability.TracingConfig.SampleRate,
+			Enabled:        true,
+		}
+		
+		// Use defaults if not configured
+		if tracingConfig.ServiceName == "" {
+			tracingConfig.ServiceName = cfg.Observability.AppName
+		}
+		if tracingConfig.ServiceVersion == "" {
+			tracingConfig.ServiceVersion = cfg.Observability.AppVersion
+		}
+		if tracingConfig.SampleRate == 0 {
+			tracingConfig.SampleRate = 0.1 // 10% sampling by default
+		}
+		
+		var err error
+		p.tracing, err = observability.NewTracingProvider(tracingConfig)
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -172,6 +217,13 @@ func DefaultConfig() Config {
 			EnableTracing: false,
 			AppName:      "authmesh-app",
 			AppVersion:   "1.0.0",
+			TracingConfig: TracingConfig{
+				ServiceName:    "authmesh-app",
+				ServiceVersion: "1.0.0",
+				Environment:    "development",
+				OTLPEndpoint:   "http://localhost:4318",
+				SampleRate:     0.1,
+			},
 		},
 	}
 }
@@ -179,13 +231,20 @@ func DefaultConfig() Config {
 // SetupMiddleware configures all middleware for a Gin router
 func (p *Platform) SetupMiddleware(router *gin.Engine) {
 	// Recovery middleware (should be first)
-	router.Use(middleware.RecoveryMiddleware())
+	if p.config.Observability.EnableMetrics {
+		logger, _ := zap.NewProduction()
+		router.Use(middleware.RecoveryWithLoggingMiddleware(logger))
+	} else {
+		router.Use(gin.Recovery())
+	}
 	
-	// Request ID middleware
+	// Request ID middleware  
 	router.Use(middleware.RequestIDMiddleware())
 	
-	// Response time middleware
-	router.Use(middleware.ResponseTimeMiddleware())
+	// Tracing middleware (early in the chain)
+	if p.config.Observability.EnableTracing && p.tracing != nil {
+		router.Use(p.tracing.TracingMiddleware())
+	}
 	
 	// Security middleware
 	securityConfig := middleware.SecurityConfig{
@@ -207,13 +266,41 @@ func (p *Platform) SetupMiddleware(router *gin.Engine) {
 	}
 	router.Use(middleware.SetupCORS(corsConfig))
 	
+	// Enhanced rate limiting middleware (if enabled)
+	if p.config.RateLimit.Enabled {
+		rateLimitConfig := ratelimit.Config{
+			RedisClient:             p.redisClient,
+			RequestsPerSecond:       p.config.RateLimit.RequestsPerSecond,
+			BurstSize:               p.config.RateLimit.BurstSize,
+			TenantEnabled:           p.config.RateLimit.TenantEnabled,
+			TenantRequestsPerSecond: p.config.RateLimit.TenantRequestsPerSecond,
+			TenantBurstSize:         p.config.RateLimit.TenantBurstSize,
+			Algorithm:               ratelimit.TokenBucketAlgorithm,
+			WindowSize:              time.Minute,
+		}
+		router.Use(ratelimit.Middleware(rateLimitConfig))
+	}
+	
+	// Structured logging middleware (if enabled)
+	if p.config.Observability.EnableMetrics {
+		logger, _ := zap.NewProduction()
+		loggingConfig := middleware.LoggingConfig{
+			Logger:        logger,
+			SkipPaths:     []string{"/health", "/ready", "/metrics"},
+			EnableBody:    false,
+			EnableHeaders: false,
+			MaxBodySize:   1024,
+		}
+		router.Use(middleware.StructuredLoggingMiddleware(loggingConfig))
+		
+		// Audit logging for sensitive operations
+		router.Use(middleware.AuditLoggingMiddleware(logger))
+	}
+	
 	// Metrics middleware (if enabled)
 	if p.config.Observability.EnableMetrics && p.metrics != nil {
 		router.Use(observability.MetricsMiddleware(p.metrics))
 	}
-	
-	// Health check middleware
-	router.Use(middleware.HealthCheckMiddleware())
 }
 
 // AuthMiddleware returns a JWT authentication middleware
@@ -307,4 +394,26 @@ func (p *Platform) GetRedisClient() *redis.Client {
 // GetMetrics returns the metrics instance
 func (p *Platform) GetMetrics() *observability.Metrics {
 	return p.metrics
+}
+
+// GetTracingProvider returns the tracing provider
+func (p *Platform) GetTracingProvider() *observability.TracingProvider {
+	return p.tracing
+}
+
+// Shutdown gracefully shuts down the platform resources
+func (p *Platform) Shutdown(ctx context.Context) error {
+	if p.tracing != nil {
+		if err := p.tracing.Shutdown(ctx); err != nil {
+			return fmt.Errorf("failed to shutdown tracing: %w", err)
+		}
+	}
+	
+	if p.redisClient != nil {
+		if err := p.redisClient.Close(); err != nil {
+			return fmt.Errorf("failed to close Redis client: %w", err)
+		}
+	}
+	
+	return nil
 }
