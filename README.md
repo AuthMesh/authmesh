@@ -55,15 +55,60 @@ go get github.com/AuthMesh/authmesh
 package main
 
 import (
+    "context"
     "log"
     "github.com/AuthMesh/authmesh/pkg/platform"
     "github.com/gin-gonic/gin"
 )
 
 func main() {
-    // Create platform with default configuration
-    config := platform.DefaultConfig()
-    config.Keycloak.URL = "http://localhost:9443"
+    // Stage 3: Unified API - One line setup
+    authMesh, err := platform.QuickStart("my-service")
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer authMesh.Shutdown(context.Background())
+    
+    // Setup everything in one call
+    router := gin.Default()
+    authMesh.SetupAll(router) // Middleware + routes configured
+    
+    // Add your routes
+    router.GET("/protected", authMesh.AuthMiddleware(), func(c *gin.Context) {
+        c.JSON(200, gin.H{"message": "Hello authenticated user!"})
+    })
+    
+    router.Run(":8080")
+}
+```
+
+### Advanced Configuration ⭐ *Stage 3*
+
+Choose the setup method that fits your needs:
+
+```go
+// Quick start for demos and development
+authMesh, err := platform.QuickStart("my-service")
+
+// Production setup with custom configuration
+config := platform.DefaultConfig()
+config.Keycloak.URL = "https://auth.company.com"
+config.Redis.URL = "redis://redis-cluster:6379"
+authMesh, err := platform.NewProduction(config)
+
+// Simple setup with observability
+authMesh, err := platform.NewWithObservability(
+    "https://keycloak:9443",
+    "redis://redis:6379", 
+    "my-service",
+)
+
+// Basic setup
+authMesh, err := platform.NewWithDefaults(
+    "http://localhost:9443",
+    "redis://localhost:6379",
+)
+```
     config.Keycloak.Realm = "your-realm"
     
     authMesh, err := platform.New(config)
@@ -328,27 +373,72 @@ func businessHandler(c *gin.Context) {
     c.JSON(200, result)
 }
 
-## Examples
+## Examples ⭐ *Enhanced in Stage 3*
 
 Check the `examples/` directory for complete working examples:
 
-- **`basic-app/`**: Simple authentication setup
+- **`simple-app/`**: Stage 3 unified API demonstration (5 lines of setup)
+- **`basic-app/`**: Comprehensive setup with full observability stack  
 - **`advanced-app/`**: Advanced features and custom middleware
 - **`migration-examples/`**: Migration guides from other auth libraries
 
-## Testing
+### API Evolution
 
-Run the test suite:
-
-```bash
-go test ./...
+**Stage 1-2**: Detailed configuration (40+ lines)
+```go
+config := platform.DefaultConfig()
+config.Keycloak.URL = "http://localhost:9443"
+config.Redis.URL = "redis://localhost:6379"
+config.Observability.AppName = "my-app"
+config.Observability.EnableMetrics = true
+config.Observability.EnableTracing = true
+// ... 30+ more configuration lines
+authMesh, err := platform.New(config)
+router := gin.Default()
+authMesh.SetupMiddleware(router)
+authMesh.SetupRoutes(router)
 ```
 
-Run with coverage:
-
-```bash
-go test -cover ./...
+**Stage 3**: Unified API (5 lines)
+```go
+authMesh, err := platform.QuickStart("my-app")
+defer authMesh.Shutdown(context.Background())
+router := gin.Default()
+authMesh.SetupAll(router)
 ```
+
+## Testing ⭐ *New in Stage 3*
+
+### Unit Tests
+```bash
+go test ./pkg/...           # Test all packages
+go test -cover ./pkg/...    # With coverage
+```
+
+### E2E Tests
+```bash
+cd tests
+./run-e2e.sh               # Full E2E test suite with Docker
+```
+
+### Performance Benchmarks
+```bash
+go test -bench=. ./tests/benchmarks/  # Performance benchmarks
+```
+
+### Test Categories
+
+- **Unit Tests**: Co-located with code in `pkg/` directories
+- **E2E Tests**: Full application testing in `tests/e2e/`
+- **Integration Tests**: External service testing in `tests/integration/`
+- **Benchmarks**: Performance testing in `tests/benchmarks/`
+
+The E2E test suite includes:
+- ✅ Basic API functionality and health checks
+- ✅ Rate limiting behavior under load
+- ✅ Observability metrics and tracing
+- ✅ Security headers and CORS
+- ✅ Graceful shutdown and error handling
 
 ## Production Readiness
 

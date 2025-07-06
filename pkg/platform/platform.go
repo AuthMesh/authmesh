@@ -29,6 +29,7 @@ type KeycloakConfig struct {
 	URL            string   `json:"url"`
 	Realm          string   `json:"realm"`
 	TrustedIssuers []string `json:"trusted_issuers"`
+	SkipJWKSInit   bool     `json:"skip_jwks_init"` // For testing purposes
 }
 
 // RedisConfig represents Redis configuration
@@ -165,10 +166,12 @@ func New(cfg Config) (*Platform, error) {
 		}
 	}
 
-	// Initialize JWKS
-	jwksURL := cfg.Keycloak.URL + "/realms/" + cfg.Keycloak.Realm + "/protocol/openid-connect/certs"
-	if err := auth.InitJWKS(jwksURL); err != nil {
-		return nil, err
+	// Initialize JWKS (skip for testing)
+	if !cfg.Keycloak.SkipJWKSInit && cfg.Keycloak.URL != "" {
+		jwksURL := cfg.Keycloak.URL + "/realms/" + cfg.Keycloak.Realm + "/protocol/openid-connect/certs"
+		if err := auth.InitJWKS(jwksURL); err != nil {
+			return nil, err
+		}
 	}
 
 	return p, nil
@@ -226,6 +229,74 @@ func DefaultConfig() Config {
 			},
 		},
 	}
+}
+
+// Convenience constructor functions for common scenarios
+
+// NewWithDefaults creates a platform with sensible defaults for development
+func NewWithDefaults(keycloakURL, redisURL string) (*Platform, error) {
+	config := DefaultConfig()
+	config.Keycloak.URL = keycloakURL
+	config.Redis.URL = redisURL
+	return New(config)
+}
+
+// NewWithObservability creates a platform with full observability enabled
+func NewWithObservability(keycloakURL, redisURL, serviceName string) (*Platform, error) {
+	config := DefaultConfig()
+	config.Keycloak.URL = keycloakURL
+	config.Redis.URL = redisURL
+	
+	// Enable full observability
+	config.Observability.EnableMetrics = true
+	config.Observability.EnableTracing = true
+	config.Observability.AppName = serviceName
+	config.Observability.TracingConfig.ServiceName = serviceName
+	config.Observability.TracingConfig.Environment = "development"
+	config.Observability.TracingConfig.OTLPEndpoint = "http://localhost:4318"
+	config.Observability.TracingConfig.SampleRate = 1.0
+	
+	return New(config)
+}
+
+// NewProduction creates a platform configured for production
+func NewProduction(config Config) (*Platform, error) {
+	// Apply production defaults
+	if config.Observability.TracingConfig.SampleRate == 0 {
+		config.Observability.TracingConfig.SampleRate = 0.1 // 10% sampling
+	}
+	if config.Observability.TracingConfig.Environment == "" {
+		config.Observability.TracingConfig.Environment = "production"
+	}
+	
+	// Enable security features by default
+	config.Security.EnableSSRFProtection = true
+	config.Security.BlockPrivateIPs = true
+	config.Security.EnableSecurityHeaders = true
+	
+	return New(config)
+}
+
+// QuickStart creates a platform with minimal configuration for demos
+func QuickStart(serviceName string) (*Platform, error) {
+	return NewWithObservability(
+		"http://localhost:9443",
+		"redis://localhost:6379",
+		serviceName,
+	)
+}
+
+// NewForTesting creates a platform configured for testing (no external dependencies)
+func NewForTesting(serviceName string) (*Platform, error) {
+	config := DefaultConfig()
+	config.Keycloak.URL = ""
+	config.Keycloak.SkipJWKSInit = true
+	config.Redis.URL = ""
+	config.Observability.AppName = serviceName
+	config.Observability.EnableMetrics = false
+	config.Observability.EnableTracing = false
+	
+	return New(config)
 }
 
 // SetupMiddleware configures all middleware for a Gin router
@@ -374,6 +445,22 @@ func (p *Platform) SetupRoutes(router *gin.Engine) {
 	// User info endpoint
 	router.GET("/whoami", p.AuthMiddleware(), auth.WhoAmIHandler)
 	router.GET("/session", p.AuthMiddleware(), auth.SessionInfoHandler)
+}
+
+// SetupAll configures middleware and basic routes in one call
+func (p *Platform) SetupAll(router *gin.Engine) {
+	p.SetupMiddleware(router)
+	p.SetupRoutes(router)
+}
+
+// RegisterRoutes is an alias for SetupRoutes for API consistency
+func (p *Platform) RegisterRoutes(router *gin.Engine) {
+	p.SetupRoutes(router)
+}
+
+// ConfigureMiddleware is an alias for SetupMiddleware for API consistency  
+func (p *Platform) ConfigureMiddleware(router *gin.Engine) {
+	p.SetupMiddleware(router)
 }
 
 // GetConfig returns the platform configuration
