@@ -17,7 +17,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"golang-multi-tenant/pkg/keycloak"
+	"github.com/AuthMesh/authmesh/pkg/keycloak"
 )
 
 // Error definitions for rate limiting operations

@@ -82,31 +82,59 @@ func InitJWKS(jwksURL string) error {
 	return nil
 }
 
-// loadJWKS creates a new JWKS instance for a specific URL
+// loadJWKS creates a new JWKS instance for a specific URL with retry logic
 func loadJWKS(jwksURL string) (*keyfunc.JWKS, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
 	// Create secure HTTP client with proper TLS validation
 	client := tlsutil.CreateSecureHTTPClient()
-	client.Timeout = 30 * time.Second
+	client.Timeout = 10 * time.Second
 
-	jwks, err := keyfunc.Get(jwksURL, keyfunc.Options{
-		Ctx:             ctx,
-		RefreshInterval: 5 * time.Minute, // Refresh every 5 minutes instead of 1 hour
-		RefreshTimeout:  10 * time.Second,
-		Client:          client,
-		RefreshErrorHandler: func(err error) {
-			log.Printf("[ERROR] JWKS refresh failed: %v", err)
-		},
-	})
+	// Retry configuration
+	maxRetries := 10
+	baseDelay := 2 * time.Second
+	maxDelay := 30 * time.Second
 
-	if err != nil {
-		return nil, err
+	var lastErr error
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		
+		log.Printf("[INFO] Attempting to load JWKS from %s (attempt %d/%d)", jwksURL, attempt+1, maxRetries)
+		
+		jwks, err := keyfunc.Get(jwksURL, keyfunc.Options{
+			Ctx:             ctx,
+			RefreshInterval: 5 * time.Minute, // Refresh every 5 minutes instead of 1 hour
+			RefreshTimeout:  10 * time.Second,
+			Client:          client,
+			RefreshErrorHandler: func(err error) {
+				log.Printf("[ERROR] JWKS refresh failed: %v", err)
+			},
+		})
+		
+		cancel()
+
+		if err == nil {
+			log.Printf("[INFO] JWKS loaded successfully from %s after %d attempts", jwksURL, attempt+1)
+			return jwks, nil
+		}
+
+		lastErr = err
+		
+		// If this is the last attempt, don't wait
+		if attempt == maxRetries-1 {
+			break
+		}
+
+		// Calculate delay with exponential backoff and jitter
+		backoffMultiplier := 1 << uint(attempt) // 2^attempt
+		delay := time.Duration(float64(baseDelay) * float64(backoffMultiplier))
+		if delay > maxDelay {
+			delay = maxDelay
+		}
+		
+		log.Printf("[WARN] JWKS load failed (attempt %d/%d): %v. Retrying in %v...", attempt+1, maxRetries, err, delay)
+		time.Sleep(delay)
 	}
 
-	log.Printf("[INFO] JWKS loaded successfully from %s", jwksURL)
-	return jwks, nil
+	return nil, fmt.Errorf("failed to load JWKS after %d attempts: %w", maxRetries, lastErr)
 }
 
 // GetJWKS gets or loads JWKS for a specific realm
