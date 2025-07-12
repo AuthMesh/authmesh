@@ -313,7 +313,7 @@ func RequireAuth() gin.HandlerFunc {
 		}
 
 		// Now fully verify the token with revocation checking
-		verifiedClaims, err := validateJWTWithRevocationCheck(tokenStr)
+		verifiedClaims, err := ValidateJWTWithRevocationCheck(tokenStr)
 		if err != nil {
 			logAuthEvent("WARN", "Authentication failed - token verification error", c, map[string]interface{}{
 				"realm": realm,
@@ -732,8 +732,8 @@ func ValidateRefreshToken(realm, refreshToken, clientID, clientSecret string) (*
 	return &tokenResp, nil
 }
 
-// Enhanced JWT validation with revocation checking
-func validateJWTWithRevocationCheck(tokenString string) (jwt.MapClaims, error) {
+// ValidateJWTWithRevocationCheck validates a JWT token and checks for revocation
+func ValidateJWTWithRevocationCheck(tokenString string) (jwt.MapClaims, error) {
 	// Parse the token
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {

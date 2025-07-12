@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/AuthMesh/authmesh/pkg/auth"
@@ -352,22 +353,103 @@ func (p *Platform) AuthMiddleware(requiredRole ...string) gin.HandlerFunc {
 	if len(requiredRole) > 0 {
 		// Return a single middleware that combines both auth and role checking
 		return gin.HandlerFunc(func(c *gin.Context) {
-			// First, do authentication check
-			_, exists := c.Get("claims")
-			if !exists {
-				// Run the authentication middleware
-				authMiddleware := auth.RequireAuth()
-				authMiddleware(c)
-				
-				// If auth failed, return early
-				if c.IsAborted() {
+			// Do JWT authentication inline (without calling c.Next())
+			
+			// Extract and validate Authorization header
+			authHeader := c.GetHeader("Authorization")
+			if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+					"error": "Missing or invalid Authorization header",
+					"code":  "AUTH_HEADER_MISSING",
+				})
+				return
+			}
+
+			tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+			if len(tokenStr) == 0 {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+					"error": "Missing or invalid Authorization header",
+					"code":  "TOKEN_EMPTY",
+				})
+				return
+			}
+
+			// Validate JWT using AuthMesh's validation logic
+			verifiedClaims, err := auth.ValidateJWTWithRevocationCheck(tokenStr)
+			if err != nil {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+					"error": "Invalid or expired token",
+					"code":  "TOKEN_VALIDATION_ERROR",
+				})
+				return
+			}
+
+			// Set all required context variables (like RequireAuth does)
+			c.Set("claims", verifiedClaims)
+			
+			// Extract and set user info
+			userInfo := make(map[string]interface{})
+			if sub, ok := verifiedClaims["sub"].(string); ok {
+				userInfo["sub"] = sub
+			}
+			if email, ok := verifiedClaims["email"].(string); ok {
+				userInfo["email"] = email
+			}
+			if username, ok := verifiedClaims["preferred_username"].(string); ok {
+				userInfo["username"] = username
+			}
+			if name, ok := verifiedClaims["name"].(string); ok {
+				userInfo["name"] = name
+			}
+			if tenantID, ok := verifiedClaims["tenant_id"].(string); ok {
+				userInfo["tenant_id"] = tenantID
+			}
+			c.Set("user_info", userInfo)
+			
+			// Extract and set user roles
+			userRoles := []string{}
+			if realmAccess, ok := verifiedClaims["realm_access"].(map[string]interface{}); ok {
+				if rolesInterface, ok := realmAccess["roles"].([]interface{}); ok {
+					for _, r := range rolesInterface {
+						if roleStr, ok := r.(string); ok {
+							userRoles = append(userRoles, roleStr)
+						}
+					}
+				}
+			}
+			c.Set("user_roles", userRoles)
+			
+			// Check if user is suspended first
+			for _, r := range userRoles {
+				if r == "suspended" {
+					c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+						"error": "Account suspended",
+						"code":  "ACCOUNT_SUSPENDED",
+					})
 					return
 				}
 			}
 			
-			// Now do role checking
-			roleMiddleware := auth.RequireRole(requiredRole[0])
-			roleMiddleware(c)
+			// Check if user has the required role
+			hasRole := false
+			for _, r := range userRoles {
+				if r == requiredRole[0] {
+					hasRole = true
+					break
+				}
+			}
+
+			if !hasRole {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+					"error":         "Insufficient role permissions",
+					"code":          "INSUFFICIENT_ROLE",
+					"required_role": requiredRole[0],
+				})
+				return
+			}
+			
+			// Both auth and role check passed, continue to handler
+			c.Next()
 		})
 	}
 	return auth.RequireAuth()

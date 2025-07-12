@@ -26,6 +26,55 @@ authMesh := platform.NewProduction(platform.Config{
 - Required claims validation
 - JWKS key rotation support
 
+### Middleware Security Patterns
+
+**Critical Security Pattern: Proper Middleware Chaining**
+
+AuthMesh provides secure middleware patterns that prevent common authentication bypass vulnerabilities:
+
+```go
+// ✅ SECURE: Combined auth + role middleware
+admin := router.Group("/api/v1/admin")
+admin.Use(authMesh.AuthMiddleware("admin")) // Combines JWT validation + role check atomically
+
+// ✅ SECURE: Separate middleware for different requirements
+public := router.Group("/api/v1/public")
+public.Use(authMesh.AuthMiddleware()) // JWT validation only
+
+protected := router.Group("/api/v1/protected")
+protected.Use(authMesh.AuthMiddleware()) // JWT validation
+protected.Use(authMesh.RequireRole("user")) // Additional role check
+```
+
+**❌ AVOID: Manual middleware chaining that can bypass security**
+
+```go
+// NEVER do this - creates race conditions and security bypasses
+func insecureMiddleware(c *gin.Context) {
+    authMw := auth.RequireAuth()
+    authMw(c) // This calls c.Next() immediately, bypassing role checks
+    
+    // Role check runs AFTER handler execution - TOO LATE!
+    roleMw := auth.RequireRole("admin") 
+    roleMw(c)
+}
+```
+
+**Security Guarantees:**
+- Atomic authentication and authorization checks
+- No handler execution until ALL security checks pass
+- Proper `c.AbortWithStatusJSON()` behavior prevents response tampering
+- Context variables are set correctly for downstream handlers
+- Audit logging captures all security decisions in order
+
+**Implementation Details:**
+The `AuthMiddleware(role)` pattern ensures:
+1. JWT validation happens first (signature, expiration, issuer)
+2. Claims are extracted and validated
+3. Role requirements are checked atomically
+4. Only on complete success does `c.Next()` continue to handlers
+5. Any failure calls `c.AbortWithStatusJSON()` immediately
+
 ### Multi-Tenant Isolation
 
 ```go
@@ -93,6 +142,37 @@ authMesh.SetupRateLimiting(platform.RateLimitConfig{
 - Brute force authentication
 - API abuse
 - Resource exhaustion
+
+### Authentication Bypass Prevention
+
+**Critical Vulnerability: Response Tampering**
+
+AuthMesh prevents a critical class of authentication bypass vulnerabilities where middleware execution order can allow unauthorized responses:
+
+```go
+// ✅ PROTECTED: AuthMesh prevents this attack pattern
+// Scenario: Attacker with "viewer" role tries to access admin endpoint
+// 1. JWT validates successfully (user is authenticated)
+// 2. Role check fails (viewer != admin required)
+// 3. AuthMesh properly aborts with 403 BEFORE handler execution
+// 4. Handler never runs, preventing data leakage
+```
+
+**Vulnerability Pattern Prevented:**
+```
+❌ VULNERABLE PATTERN (Fixed in AuthMesh):
+1. Auth middleware validates JWT ✓
+2. Auth middleware calls c.Next() → Handler executes ✓
+3. Handler returns sensitive data with 200 OK ✓
+4. Role middleware runs AFTER handler → Tries to abort with 403 ✗
+5. Result: Response contains BOTH 200 data AND 403 error
+```
+
+**AuthMesh Protection:**
+- Atomic security validation before handler execution
+- Proper `c.AbortWithStatusJSON()` prevents response tampering
+- No `c.Next()` until ALL security requirements are satisfied
+- Comprehensive audit logging of security decisions
 
 ### SSRF Prevention
 
@@ -278,6 +358,44 @@ trivy image authmesh:latest
 # Static analysis
 gosec ./...
 ```
+
+### Security Debugging
+
+**Diagnosing Authentication Issues:**
+
+```bash
+# Check for middleware execution order issues
+docker logs backend-container | grep -E "(Authentication|Authorization|Headers were already written)"
+
+# Look for response tampering patterns
+curl -v -H "Authorization: Bearer $INVALID_ROLE_TOKEN" http://localhost:8080/admin/endpoint
+# Should return clean 403, not mixed 200+403 response
+```
+
+**Common Security Debugging Patterns:**
+
+```go
+// Add debug logging to middleware
+func debugAuthMiddleware(c *gin.Context) {
+    log.Printf("[DEBUG] Auth middleware: Starting, IsAborted=%v", c.IsAborted())
+    
+    // ... authentication logic ...
+    
+    if c.IsAborted() {
+        log.Printf("[DEBUG] Auth middleware: Aborted early")
+        return
+    }
+    
+    log.Printf("[DEBUG] Auth middleware: Completed successfully, calling c.Next()")
+    c.Next()
+}
+```
+
+**Warning Signs of Security Issues:**
+- "Headers were already written" errors in logs
+- Mixed success/error JSON responses
+- Middleware logs showing wrong execution order
+- 200 status codes when expecting 401/403
 
 ### Patch Management
 
