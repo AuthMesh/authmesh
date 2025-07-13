@@ -32,15 +32,22 @@ func TenantMiddleware() gin.HandlerFunc {
 		// Extract tenant_id from JWT claims
 		tenantID, err := extractTenantIDFromClaims(userClaims)
 		if err != nil {
+			fmt.Printf("DEBUG: TenantMiddleware - failed to extract tenant_id: %v\n", err)
+			fmt.Printf("DEBUG: TenantMiddleware - available claims: %v\n", userClaims)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or missing tenant_id in token"})
 			c.Abort()
 			return
 		}
+		fmt.Printf("DEBUG: TenantMiddleware - extracted tenant_id: %s\n", tenantID)
 
-		// Check if this is a tenant-specific route (/t/{tenant}/...)
-		if pathTenantID := c.Param("tenant"); pathTenantID != "" {
-			fmt.Printf("DEBUG: TenantMiddleware - pathTenantID from :tenant param: '%s'\n", pathTenantID)
-			fmt.Printf("DEBUG: TenantMiddleware - tenantID from JWT: '%s'\n", tenantID)
+	// Check if this is a tenant-specific route (/t/{tenant_id}/...)
+	pathTenantID := c.Param("tenant_id")
+	fmt.Printf("DEBUG: TenantMiddleware - pathTenantID from c.Param('tenant_id'): '%s'\n", pathTenantID)
+	fmt.Printf("DEBUG: TenantMiddleware - tenantID from JWT: '%s'\n", tenantID)
+	fmt.Printf("DEBUG: TenantMiddleware - full path: '%s'\n", c.Request.URL.Path)
+	
+	if pathTenantID != "" {
+			fmt.Printf("DEBUG: TenantMiddleware - entering tenant validation logic\n")
 			// Validate that the JWT tenant_id matches the route tenant_id
 			if tenantID != pathTenantID {
 				fmt.Printf("DEBUG: TenantMiddleware - TENANT MISMATCH - denying access\n")
