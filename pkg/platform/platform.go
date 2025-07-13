@@ -13,6 +13,7 @@ import (
 	"github.com/AuthMesh/authmesh/pkg/config"
 	"github.com/AuthMesh/authmesh/pkg/middleware"
 	"github.com/AuthMesh/authmesh/pkg/observability"
+	"github.com/AuthMesh/authmesh/pkg/ratelimit"
 	"github.com/AuthMesh/authmesh/pkg/usermanagement"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -106,6 +107,7 @@ type Platform struct {
 	redisClient  *redis.Client
 	userManager  *usermanagement.UserManager
 	userHandler  *usermanagement.UserManagementHandler
+	rateLimitHandler *ratelimit.SuperAdminHandler
 	logger       *zap.Logger
 	metrics      *observability.Metrics
 	tracing      *observability.TracingProvider
@@ -247,6 +249,16 @@ func New(cfg Config) (*Platform, error) {
 			} else {
 				fmt.Printf("DEBUG: UserManagementHandler initialized successfully\n")
 				p.userHandler = userHandler
+			}
+			
+			// Initialize rate limit handler
+			rateLimitHandler, err := ratelimit.NewSuperAdminHandler(p.redisClient, p.logger)
+			if err != nil {
+				fmt.Printf("DEBUG: Failed to initialize RateLimitHandler: %v\n", err)
+				p.logger.Warn("Failed to initialize RateLimitHandler", zap.Error(err))
+			} else {
+				fmt.Printf("DEBUG: RateLimitHandler initialized successfully\n")
+				p.rateLimitHandler = rateLimitHandler
 			}
 		}
 	} else {
@@ -575,6 +587,13 @@ func (p *Platform) SetupRoutes(router *gin.Engine) {
 					"realm":   realmRequest,
 				})
 			})
+			
+			// Rate limit endpoints (if rate limit handler is available)
+			if p.rateLimitHandler != nil {
+				fmt.Printf("DEBUG: registering rate limit endpoints\n")
+				apiSuperadmin.PUT("/realms/:realm_id/rate-limits", p.rateLimitHandler.SetRealmRateLimits)
+				apiSuperadmin.GET("/realms/:realm_id/rate-limits", p.rateLimitHandler.GetRealmRateLimits)
+			}
 		}
 
 		// Self-registration endpoints (no auth required)
