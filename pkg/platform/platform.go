@@ -578,7 +578,7 @@ func (p *Platform) SetupRoutes(router *gin.Engine) {
 		}
 
 		// Self-registration endpoints (no auth required)
-		router.POST("/t/:tenant_id/register", p.userHandler.Register)
+		router.POST("/api/v1/t/:tenant_id/register", p.userHandler.Register)
 
 		// Tenant-specific user management endpoints
 		tenantGroup := router.Group("/t/:tenant_id")
