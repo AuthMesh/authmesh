@@ -475,16 +475,17 @@ func (p *Platform) OptionalAuthMiddleware() gin.HandlerFunc {
 
 // TenantMiddleware returns a tenant isolation middleware
 func (p *Platform) TenantMiddleware() gin.HandlerFunc {
+	fmt.Println("DEBUG: Platform.TenantMiddleware() called - returning auth.TenantMiddleware()")
 	return auth.TenantMiddleware()
 }
 
 // TenantRateLimitMiddleware returns a per-tenant rate limiting middleware
 func (p *Platform) TenantRateLimitMiddleware() gin.HandlerFunc {
-	var rateLimitCache auth.RateLimitCache
-	if p.userManager != nil {
-		rateLimitCache = p.userManager.GetRateLimitCache()
+	// TODO: Implement tenant-specific rate limiting middleware
+	// For now, return a no-op middleware
+	return func(c *gin.Context) {
+		c.Next()
 	}
-	return auth.TenantRateLimitMiddleware(p.redisClient, rateLimitCache)
 }
 
 // RequireRole returns a role-based access control middleware

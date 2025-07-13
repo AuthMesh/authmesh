@@ -674,6 +674,17 @@ func GetTenantIDFromJWTClaims(c *gin.Context) (string, bool) {
 	return "", false
 }
 
+// GetRealmFromContext retrieves the tenant_id (realm) from the Gin context
+// Returns the tenant_id and a boolean indicating if it was found
+func GetRealmFromContext(c *gin.Context) (string, bool) {
+	if tenantID, exists := c.Get("tenant_id"); exists {
+		if tid, ok := tenantID.(string); ok {
+			return tid, true
+		}
+	}
+	return "", false
+}
+
 // RefreshTokenRequest represents a request to refresh a token
 type RefreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token"`
