@@ -3,6 +3,7 @@ package auth
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
@@ -64,8 +65,26 @@ func TenantMiddleware() gin.HandlerFunc {
 
 // Helper function to extract tenant_id from claims
 func extractTenantIDFromClaims(claims jwt.MapClaims) (string, error) {
+	// First try to get tenant_id from custom claims
 	if tenantID, ok := claims["tenant_id"].(string); ok && tenantID != "" {
 		return tenantID, nil
 	}
-	return "", fmt.Errorf("tenant_id not found or empty in token claims")
+	
+	// Fallback: extract realm from issuer claim (standard approach for Keycloak)
+	if iss, ok := claims["iss"].(string); ok {
+		// Extract realm from issuer URL
+		// Example: http://localhost:9443/realms/tenant1 -> tenant1
+		const realmPrefix = "/realms/"
+		if idx := strings.Index(iss, realmPrefix); idx != -1 {
+			realmStart := idx + len(realmPrefix)
+			// Find the end of the realm (next '/' or end of string)
+			realmEnd := strings.Index(iss[realmStart:], "/")
+			if realmEnd == -1 {
+				return iss[realmStart:], nil
+			}
+			return iss[realmStart : realmStart+realmEnd], nil
+		}
+	}
+	
+	return "", fmt.Errorf("tenant_id not found in token claims or issuer")
 }
