@@ -29,6 +29,7 @@ type Config struct {
 	CORS          CORSConfig          `json:"cors"`
 	RateLimit     RateLimitConfig     `json:"rate_limit"`
 	Observability ObservabilityConfig `json:"observability"`
+	Routes        RouteConfig         `json:"routes"`
 }
 
 // KeycloakConfig represents Keycloak configuration
@@ -97,6 +98,17 @@ type TracingConfig struct {
 	JaegerURL      string  `json:"jaeger_url"`
 	OTLPEndpoint   string  `json:"otlp_endpoint"`
 	SampleRate     float64 `json:"sample_rate"`
+}
+
+// RouteConfig represents route configuration for the opinionated platform
+type RouteConfig struct {
+	EnableStandardHealthRoutes bool     `json:"enable_standard_health_routes"` // /health, /healthz, /ready, /readyz
+	EnableRootWelcomeRoute     bool     `json:"enable_root_welcome_route"`     // /
+	EnableStandardAdminRoutes  bool     `json:"enable_standard_admin_routes"`  // /api/v1/admin/*
+	EnableStandardTenantRoutes bool     `json:"enable_standard_tenant_routes"` // /t/:tenant_id/api/v1/*
+	CustomHealthMessage        string   `json:"custom_health_message"`         // Custom message for health endpoints
+	CustomWelcomeMessage       string   `json:"custom_welcome_message"`        // Custom welcome message
+	ExcludeRoutes              []string `json:"exclude_routes"`                // Routes to exclude from auto-setup
 }
 
 // Platform represents the unified authentication platform
@@ -316,6 +328,15 @@ func DefaultConfig() Config {
 			NATSURL:          "http://localhost:8222",
 			DatabaseURL:      "postgres://postgres:postgres@localhost:5432/multi_tenant_platform?sslmode=disable",
 		},
+		Routes: RouteConfig{
+			EnableStandardHealthRoutes: true,
+			EnableRootWelcomeRoute:     true,
+			EnableStandardAdminRoutes:  true,
+			EnableStandardTenantRoutes: true,
+			CustomHealthMessage:        "OK",
+			CustomWelcomeMessage:       "Welcome to AuthMesh",
+			ExcludeRoutes:              []string{},
+		},
 	}
 }
 
@@ -532,20 +553,65 @@ func (p *Platform) SuperAdminMiddleware() gin.HandlerFunc {
 
 // SetupRoutes sets up common routes like metrics and health checks
 func (p *Platform) SetupRoutes(router *gin.Engine) {
-	// Basic health check routes
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"status":    "healthy",
-			"timestamp": time.Now().UTC().Format(time.RFC3339),
+	// Standard health check routes (Kubernetes/Cloud Native patterns)
+	if p.config.Routes.EnableStandardHealthRoutes {
+		router.GET("/health", func(c *gin.Context) {
+			c.JSON(200, gin.H{
+				"status":    "healthy",
+				"timestamp": time.Now().UTC().Format(time.RFC3339),
+			})
 		})
-	})
-	
-	router.GET("/ready", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"status":    "ready", 
-			"timestamp": time.Now().UTC().Format(time.RFC3339),
+		
+		router.GET("/ready", func(c *gin.Context) {
+			c.JSON(200, gin.H{
+				"status":    "ready", 
+				"timestamp": time.Now().UTC().Format(time.RFC3339),
+			})
 		})
-	})
+		
+		// Common health check variants for different platforms
+		router.GET("/healthz", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{
+				"status":    "ok",
+				"service":   p.config.Observability.AppName,
+				"version":   p.config.Observability.AppVersion,
+				"timestamp": time.Now().Format(time.RFC3339),
+			})
+		})
+
+		router.GET("/readyz", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{
+				"status":  "ready",
+				"service": p.config.Observability.AppName,
+				"version": p.config.Observability.AppVersion,
+			})
+		})
+	}
+
+	// Welcome/root endpoint for API discovery
+	if p.config.Routes.EnableRootWelcomeRoute {
+		router.GET("/", func(c *gin.Context) {
+			// Use custom welcome message if provided, otherwise use app name
+			welcomeMessage := p.config.Routes.CustomWelcomeMessage
+			if welcomeMessage == "" {
+				welcomeMessage = fmt.Sprintf("Welcome to %s", p.config.Observability.AppName)
+			}
+			
+			c.JSON(http.StatusOK, gin.H{
+				"message":    welcomeMessage,
+				"version":    p.config.Observability.AppVersion,
+				"powered_by": "AuthMesh",
+				"endpoints": gin.H{
+					"health":     "/health, /healthz",
+					"ready":      "/ready, /readyz", 
+					"metrics":    "/metrics",
+					"auth":       "/whoami",
+					"api":        "/api/v1",
+					"tenant_api": "/t/{tenant_id}/api/v1",
+				},
+			})
+		})
+	}
 
 	// Comprehensive health check endpoint (as expected by tests)
 	router.GET("/api/v1/health", p.comprehensiveHealthCheck)
@@ -558,59 +624,19 @@ func (p *Platform) SetupRoutes(router *gin.Engine) {
 	// User info endpoint
 	router.GET("/whoami", p.AuthMiddleware(), auth.WhoAmIHandler)
 
+	// Standard Admin API patterns
+	if p.config.Routes.EnableStandardAdminRoutes {
+		p.setupAdminRoutes(router)
+	}
+
+	// Standard Tenant API patterns  
+	if p.config.Routes.EnableStandardTenantRoutes {
+		p.setupTenantRoutes(router)
+	}
+
 	// User management endpoints (if handler is available)
 	if p.userHandler != nil {
-		fmt.Printf("DEBUG: userHandler is available, registering superadmin routes\n")
-		// Superadmin user management endpoints
-		superadmin := router.Group("/superadmin")
-		superadmin.Use(p.AuthMiddleware())
-		superadmin.Use(p.SuperAdminMiddleware())
-		{
-			superadmin.POST("/tenants/:tenant_id/users", p.userHandler.AddUserSuperAdmin)
-		}
-
-		// API v1 Superadmin endpoints (for compatibility with tests)
-		fmt.Printf("DEBUG: registering /api/v1/superadmin group\n")
-		apiSuperadmin := router.Group("/api/v1/superadmin")
-		apiSuperadmin.Use(p.AuthMiddleware())
-		apiSuperadmin.Use(p.SuperAdminMiddleware())
-		{
-			fmt.Printf("DEBUG: registering POST /api/v1/superadmin/realms\n")
-			apiSuperadmin.POST("/realms", func(c *gin.Context) {
-				var realmRequest map[string]interface{}
-				if err := c.ShouldBindJSON(&realmRequest); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
-					return
-				}
-				c.JSON(http.StatusCreated, gin.H{
-					"message": "Realm created successfully",
-					"realm":   realmRequest,
-				})
-			})
-			
-			// Rate limit endpoints (if rate limit handler is available)
-			if p.rateLimitHandler != nil {
-				fmt.Printf("DEBUG: registering rate limit endpoints\n")
-				apiSuperadmin.PUT("/realms/:realm_id/rate-limits", p.rateLimitHandler.SetRealmRateLimits)
-				apiSuperadmin.GET("/realms/:realm_id/rate-limits", p.rateLimitHandler.GetRealmRateLimits)
-			}
-		}
-
-		// Self-registration endpoints (no auth required)
-		router.POST("/api/v1/t/:tenant_id/register", p.userHandler.Register)
-
-		// Tenant-specific user management endpoints
-		tenantGroup := router.Group("/t/:tenant_id")
-		tenantGroup.Use(p.AuthMiddleware())
-		tenantGroup.Use(p.TenantMiddleware())
-		{
-			// Admin endpoints
-			adminGroup := tenantGroup.Group("/admin")
-			adminGroup.Use(p.RequireRole("admin"))
-			{
-				adminGroup.POST("/users", p.userHandler.AddUser)
-			}
-		}
+		p.setupUserManagementRoutes(router)
 	}
 }
 
@@ -880,4 +906,155 @@ func (p *Platform) checkPrometheusHealth() string {
 		return "up"
 	}
 	return "down"
+}
+
+// setupAdminRoutes sets up standard admin API routes pattern
+func (p *Platform) setupAdminRoutes(router *gin.Engine) {
+	// Standard admin routes - common patterns for any application
+	admin := router.Group("/api/v1/admin")
+	admin.Use(p.AuthMiddleware("admin"))
+	{
+		// User management (if available)
+		if p.userHandler != nil {
+			admin.GET("/users", func(c *gin.Context) {
+				// This could be extended to actual user listing functionality
+				c.JSON(http.StatusOK, gin.H{
+					"message": "Admin users endpoint",
+					"users":   []string{}, // Placeholder - implement actual user listing
+				})
+			})
+		}
+
+		// Admin info endpoint
+		admin.GET("/info", func(c *gin.Context) {
+			userSub, _ := auth.GetUserSubjectFromContext(c)
+			userRoles, _ := auth.GetUserRoles(c)
+			if userRoles == nil {
+				userRoles = []string{}
+			}
+			
+			c.JSON(http.StatusOK, gin.H{
+				"message": "Admin information",
+				"user":    userSub,
+				"roles":   userRoles,
+				"admin":   true,
+			})
+		})
+
+		// System information endpoint
+		admin.GET("/system", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{
+				"app_name":    p.config.Observability.AppName,
+				"app_version": p.config.Observability.AppVersion,
+				"environment": "production", // Could be from config
+				"uptime":      time.Since(time.Now()).String(), // Placeholder
+			})
+		})
+	}
+}
+
+// setupTenantRoutes sets up standard tenant API routes pattern
+func (p *Platform) setupTenantRoutes(router *gin.Engine) {
+	// Standard tenant-specific routes pattern
+	tenant := router.Group("/t/:tenant_id/api/v1")
+	tenant.Use(p.AuthMiddleware())
+	tenant.Use(p.TenantMiddleware())
+	{
+		// Tenant information endpoint - standardized pattern
+		tenant.GET("/info", func(c *gin.Context) {
+			tenantID := c.Param("tenant_id")
+			userSub, _ := auth.GetUserSubjectFromContext(c)
+			
+			c.JSON(http.StatusOK, gin.H{
+				"message":   "Tenant information",
+				"tenant":    tenantID,
+				"tenant_id": tenantID, // For compatibility
+				"user":      userSub,
+				"timestamp": time.Now().Format(time.RFC3339),
+			})
+		})
+
+		// Tenant health check
+		tenant.GET("/health", func(c *gin.Context) {
+			tenantID := c.Param("tenant_id")
+			c.JSON(http.StatusOK, gin.H{
+				"status":    "healthy",
+				"tenant_id": tenantID,
+				"timestamp": time.Now().Format(time.RFC3339),
+			})
+		})
+
+		// Tenant-specific admin routes
+		tenantAdmin := tenant.Group("/admin")
+		tenantAdmin.Use(p.RequireRole("admin"))
+		{
+			tenantAdmin.GET("/info", func(c *gin.Context) {
+				tenantID := c.Param("tenant_id")
+				userSub, _ := auth.GetUserSubjectFromContext(c)
+				
+				c.JSON(http.StatusOK, gin.H{
+					"message":   "Tenant admin information",
+					"tenant_id": tenantID,
+					"admin":     userSub,
+					"timestamp": time.Now().Format(time.RFC3339),
+				})
+			})
+		}
+	}
+}
+
+// setupUserManagementRoutes sets up user management routes (if user handler is available)
+func (p *Platform) setupUserManagementRoutes(router *gin.Engine) {
+	fmt.Printf("DEBUG: userHandler is available, registering user management routes\n")
+	
+	// Superadmin user management endpoints
+	superadmin := router.Group("/superadmin")
+	superadmin.Use(p.AuthMiddleware())
+	superadmin.Use(p.SuperAdminMiddleware())
+	{
+		superadmin.POST("/tenants/:tenant_id/users", p.userHandler.AddUserSuperAdmin)
+	}
+
+	// API v1 Superadmin endpoints (for compatibility with tests)
+	fmt.Printf("DEBUG: registering /api/v1/superadmin group\n")
+	apiSuperadmin := router.Group("/api/v1/superadmin")
+	apiSuperadmin.Use(p.AuthMiddleware())
+	apiSuperadmin.Use(p.SuperAdminMiddleware())
+	{
+		fmt.Printf("DEBUG: registering POST /api/v1/superadmin/realms\n")
+		apiSuperadmin.POST("/realms", func(c *gin.Context) {
+			var realmRequest map[string]interface{}
+			if err := c.ShouldBindJSON(&realmRequest); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+				return
+			}
+			c.JSON(http.StatusCreated, gin.H{
+				"message": "Realm created successfully",
+				"realm":   realmRequest,
+			})
+		})
+		
+		// Rate limit endpoints (if rate limit handler is available)
+		if p.rateLimitHandler != nil {
+			fmt.Printf("DEBUG: registering rate limit endpoints\n")
+			apiSuperadmin.PUT("/realms/:realm_id/rate-limits", p.rateLimitHandler.SetRealmRateLimits)
+			apiSuperadmin.GET("/realms/:realm_id/rate-limits", p.rateLimitHandler.GetRealmRateLimits)
+		}
+	}
+
+	// Self-registration endpoints (no auth required)
+	router.POST("/api/v1/t/:tenant_id/register", p.userHandler.Register)
+
+	// Tenant-specific user management endpoints
+	tenantGroup := router.Group("/t/:tenant_id")
+	tenantGroup.Use(p.AuthMiddleware())
+	tenantGroup.Use(p.TenantMiddleware())
+	{
+		// Admin endpoints
+		adminGroup := tenantGroup.Group("/admin")
+		adminGroup.Use(p.RequireRole("admin"))
+		{
+			adminGroup.POST("/users", p.userHandler.AddUser)
+		}
+	}
 }
