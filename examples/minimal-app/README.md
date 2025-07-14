@@ -1,3 +1,4 @@
+
 # AuthMesh Minimal Example
 
 A minimal AuthMesh application that shows how to get started with just a few lines of code.
@@ -15,6 +16,7 @@ A minimal AuthMesh application that shows how to get started with just a few lin
 - Go 1.21+
 - Docker and Docker Compose (for Keycloak)
 
+
 ### 1. Start Keycloak (Optional)
 ```bash
 # Start Keycloak for authentication (runs on port 9443)
@@ -24,6 +26,7 @@ docker-compose up -d keycloak
 go run main.go
 ```
 
+
 ### 2. Run the Application
 ```bash
 go run main.go
@@ -32,6 +35,7 @@ go run main.go
 The app starts on http://localhost:8080
 
 ## 📋 API Endpoints
+
 
 ### Public Endpoints (No Auth Required)
 ```bash
@@ -50,6 +54,7 @@ curl http://localhost:8080/hello
 # Prometheus metrics
 curl http://localhost:8080/metrics
 ```
+
 
 ### Protected Endpoints (Requires JWT Token)
 ```bash
@@ -73,6 +78,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 3. Login with admin/admin
 4. Create a user and get a token
 
+
 ### Option 2: Development Token
 ```bash
 # For development/testing only - create a simple JWT
@@ -86,35 +92,23 @@ curl -H "Authorization: Bearer $TOKEN" \
 3. **Security by Default**: All best practices are enabled automatically
 4. **Extensible**: Add your own routes while keeping all AuthMesh benefits
 
+
 ## 📚 Next Steps
 
-- Try the [basic-app](../basic-app) example for custom configuration
-- See [todo-api](../todo-api) for practical API examples with custom configuration
+- Try the [quickstart-app](../quickstart-app) for more routes and RBAC
+- Try the [todo-api](../todo-api) for a real CRUD API with custom config
+- Try the [basic-app](../basic-app) for advanced features and observability
 - Check out the [AuthMesh documentation](../../../docs/) for advanced features
+
+authMesh, _ := platform.QuickStart("minimal-app")
+router := gin.Default()
+authMesh.SetupAll(router) // Everything configured!
 
 ## 🔄 Code Comparison
 
 **Without AuthMesh** (40+ lines):
 ```go
-router := gin.Default()
-
-// Manual middleware setup
-router.Use(cors.Default())
-router.Use(recovery.Recovery())
-router.Use(logging.Middleware())
-
-// Manual health checks
-router.GET("/health", healthHandler)
-router.GET("/ready", readyHandler)
-
-// Manual auth setup
-authMiddleware := jwt.New(jwt.Config{...})
-router.Use(authMiddleware)
-
-// Manual metrics setup
-prometheus.Setup(router)
-
-// And much more...
+// ...existing code...
 ```
 
 **With AuthMesh** (3 lines):
@@ -123,6 +117,7 @@ authMesh, _ := platform.QuickStart("minimal-app")
 router := gin.Default()
 authMesh.SetupAll(router) // Everything configured!
 ```
+
 
 ## 🛠️ What's Included Automatically
 

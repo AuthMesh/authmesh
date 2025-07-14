@@ -1,15 +1,16 @@
+
 # AuthMesh Todo API Example
 
-A practical Todo API that demonstrates AuthMesh's custom configuration capabilities and real-world patterns.
+A practical Todo API that demonstrates AuthMesh's custom configuration, RBAC, rate limiting, CORS, and observability features in a real-world pattern.
 
 ## ✨ Features
 
-- **Custom Configuration**: Shows how to configure AuthMesh for specific needs
-- **Role-Based Access**: User and admin endpoints with proper authorization
-- **Rate Limiting**: Demonstrates custom rate limiting configuration
+- **Custom Configuration**: Shows how to configure AuthMesh for your needs (Keycloak, Redis, CORS, rate limiting, observability)
+- **Role-Based Access**: User and admin endpoints with proper authorization (see `/api/v1/todos` and `/api/v1/admin`)
+- **Rate Limiting**: Custom rate limiting config, demo-friendly limits
 - **CORS Setup**: Multi-frontend support (React, Vue, Angular)
-- **Observability**: Metrics and tracing enabled
-- **RESTful API**: Complete CRUD operations for todos
+- **Observability**: Prometheus metrics and OpenTelemetry tracing enabled
+- **RESTful API**: Complete CRUD operations for todos (in-memory for demo)
 
 ## 🚀 Quick Start
 
@@ -17,14 +18,17 @@ A practical Todo API that demonstrates AuthMesh's custom configuration capabilit
 - Go 1.21+
 - Docker and Docker Compose
 
+docker-compose up -d
+
 ### 1. Start Infrastructure
 ```bash
-# Start Keycloak and Redis
+# Start Keycloak, Redis, and Prometheus
 docker-compose up -d
 
 # Wait for services to be ready
-sleep 10
+sleep 20
 ```
+
 
 ### 2. Run the Application
 ```bash
@@ -48,11 +52,12 @@ curl http://localhost:8080/healthz
 curl http://localhost:8080/
 ```
 
+
 ### User Endpoints (Requires JWT Token)
 ```bash
 export TOKEN="your-jwt-token-here"
 
-# List user's todos
+# List your todos
 curl -H "Authorization: Bearer $TOKEN" \
      http://localhost:8080/api/v1/todos
 
@@ -63,7 +68,7 @@ curl -X POST \
      -d '{"title": "Learn AuthMesh"}' \
      http://localhost:8080/api/v1/todos
 
-# Toggle todo completion
+# Toggle todo completion (replace 1 with your todo ID)
 curl -X PUT \
      -H "Authorization: Bearer $TOKEN" \
      http://localhost:8080/api/v1/todos/1
@@ -72,6 +77,7 @@ curl -X PUT \
 curl -H "Authorization: Bearer $TOKEN" \
      http://localhost:8080/whoami
 ```
+
 
 ### Admin Endpoints (Requires Admin Role)
 ```bash
@@ -84,19 +90,16 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" \
 # List all users (admin only)
 curl -H "Authorization: Bearer $ADMIN_TOKEN" \
      http://localhost:8080/api/v1/admin/users
-
-# Standard admin info
-curl -H "Authorization: Bearer $ADMIN_TOKEN" \
-     http://localhost:8080/api/v1/admin/info
 ```
 
 ## 🔑 Getting JWT Tokens
+
 
 ### Option 1: Keycloak UI
 1. Open http://localhost:9443
 2. Login with admin/admin
 3. Go to your realm → Users
-4. Create test users with different roles
+4. Create test users with different roles (e.g., user, admin)
 5. Use Keycloak's token endpoint to get JWT tokens
 
 ### Option 2: Direct Token Request
@@ -115,31 +118,57 @@ export TOKEN="extracted-access-token"
 
 ## 🔧 Configuration Highlights
 
-This example shows how to customize AuthMesh:
+
+This example shows how to customize AuthMesh (see `main.go` for full details):
 
 ```go
 config := platform.Config{
     Keycloak: platform.KeycloakConfig{
-        URL:   "http://localhost:9443",
-        Realm: "master",
+        URL:   getEnv("KEYCLOAK_URL", "http://localhost:9443"),
+        Realm: getEnv("KEYCLOAK_REALM", "master"),
         TrustedIssuers: []string{
+            "http://localhost:9443",
             "http://localhost:9443/realms/master",
             "http://localhost:9443/realms/myapp",
         },
     },
-    RateLimit: platform.RateLimitConfig{
-        Enabled:           true,
-        RequestsPerSecond: 10,  // Conservative limit
-        BurstSize:         20,
+    Redis: platform.RedisConfig{
+        URL: getEnv("REDIS_URL", "redis://localhost:6379"),
+        DB:  0,
+    },
+    Security: platform.SecurityConfig{
+        EnableSSRFProtection:  true,
+        BlockPrivateIPs:       true,
+        EnableSecurityHeaders: true,
     },
     CORS: platform.CORSConfig{
         AllowOrigins: []string{
             "http://localhost:3000", // React
-            "http://localhost:8080", // Vue  
+            "http://localhost:8080", // Vue
             "http://localhost:4200", // Angular
         },
+        AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+        AllowHeaders: []string{"Origin", "Content-Type", "Authorization"},
     },
-    // ... more configuration
+    RateLimit: platform.RateLimitConfig{
+        Enabled:           true,
+        RequestsPerSecond: 10,  // Demo limit
+        BurstSize:         20,
+    },
+    Observability: platform.ObservabilityConfig{
+        EnableMetrics:    true,
+        EnableTracing:    true,
+        AppName:          "todo-api",
+        AppVersion:       "1.0.0",
+        PrometheusURL:    "http://localhost:9090",
+        OTelCollectorURL: "http://localhost:4318",
+    },
+    Routes: platform.RouteConfig{
+        EnableStandardHealthRoutes: true,
+        EnableRootWelcomeRoute:     true,
+        EnableStandardAdminRoutes:  true,
+        CustomWelcomeMessage:       "Welcome to Todo API - Powered by AuthMesh",
+    },
 }
 ```
 
@@ -186,14 +215,17 @@ done
 # You should see 429 Too Many Requests after 10 requests
 ```
 
+todo-api/
+
 ## 🔄 Code Structure
 
 ```
 todo-api/
 ├── main.go              # Application entry point
 ├── docker-compose.yml   # Infrastructure services
-├── README.md           # This file
-└── .env.example        # Environment variables
+├── README.md            # This file
+├── prometheus.yml       # Prometheus config
+└── .env.example         # Example environment variables (add if needed)
 ```
 
 ## 📚 Next Steps
@@ -202,12 +234,13 @@ todo-api/
 - See the [AuthMesh documentation](../../../docs/) for production deployment patterns
 - Check [AuthMesh docs](../../../docs) for advanced features
 
+
 ## 🆚 Comparison with Other Examples
 
-| Feature | Minimal | Todo API | Multi-Tenant | Advanced |
-|---------|---------|----------|--------------|-----------|
-| Setup Lines | 3 | ~15 | ~25 | ~50 |
-| Configuration | None | Custom | Advanced | Production |
-| Auth | Basic | JWT + Roles | Tenant-aware | Multi-realm |
-| Database | None | In-memory | PostgreSQL | PostgreSQL |
-| Complexity | Beginner | Intermediate | Advanced | Production |
+| Feature        | Minimal      | QuickStart    | Todo API     | Basic/Advanced |
+|--------------- |-------------|--------------|--------------|----------------|
+| Setup Lines    | 3           | ~7           | ~15          | ~30-50         |
+| Configuration  | None        | Defaults     | Custom       | Advanced       |
+| Auth           | Basic       | JWT + Roles  | JWT + Roles  | Multi-tenant   |
+| Database       | None        | None         | In-memory    | PostgreSQL     |
+| Complexity     | Beginner    | Beginner     | Intermediate | Advanced       |

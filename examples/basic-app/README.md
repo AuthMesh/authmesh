@@ -1,6 +1,7 @@
 # AuthMesh Basic Example
 
-This example demonstrates the basic usage of AuthMesh with Keycloak authentication, Redis rate limiting, and Prometheus metrics.
+
+This example demonstrates the basic usage of AuthMesh with Keycloak authentication, Redis rate limiting, Prometheus metrics, and OpenTelemetry tracing (Jaeger).
 
 ## Prerequisites
 
@@ -15,11 +16,13 @@ This example demonstrates the basic usage of AuthMesh with Keycloak authenticati
 docker-compose up -d
 ```
 
+
 This starts:
 - Keycloak (port 9443) - Authentication server
 - Redis (port 6379) - Rate limiting and caching
 - Prometheus (port 9090) - Metrics collection
 - Grafana (port 3000) - Metrics visualization
+- Jaeger (port 16686) - Distributed tracing
 
 ### 2. Configure Keycloak
 
@@ -37,6 +40,7 @@ go run main.go
 
 The application will start on http://localhost:8080
 
+
 ## API Endpoints
 
 ### Public Endpoints
@@ -45,16 +49,18 @@ The application will start on http://localhost:8080
 - `GET /ready` - Readiness check
 - `GET /metrics` - Prometheus metrics
 
+
 ### Protected Endpoints
 - `GET /protected` - Requires valid JWT token
 - `GET /admin` - Requires admin role
 - `GET /whoami` - Returns user information
-- `GET /session` - Returns session information
+
 
 ### API Endpoints
 - `GET /api/data` - Read data (any authenticated user)
 - `POST /api/data` - Create data (editor role required)
 - `DELETE /api/data/:id` - Delete data (admin role required)
+- `GET /api/trace-demo` - Tracing demo (see Jaeger)
 
 ### Tenant-Specific Endpoints
 - `GET /t/:tenant_id/dashboard` - Tenant dashboard
@@ -95,11 +101,12 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/whoami
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/t/tenant1/dashboard
 ```
 
-## Monitoring
+
+## Monitoring & Observability
 
 ### Prometheus Metrics
 - Open http://localhost:9090
-- Query metrics like `http_requests_total`, `auth_attempts_total`
+- Query metrics like `http_requests_total`, `authmesh_auth_attempts_total`, `authmesh_rate_limit_hits_total`
 
 ### Grafana Dashboards
 - Open http://localhost:3000
@@ -107,9 +114,19 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/t/tenant1/dashboard
 - Add Prometheus as data source: http://prometheus:9090
 - Create dashboards for application metrics
 
+### Jaeger Tracing
+- Open http://localhost:16686
+- View traces for `/api/trace-demo` and other endpoints
+
 ## Configuration
 
-The example uses default configuration. For production, customize the config:
+
+The example uses default configuration, including:
+- **Rate limiting**: 10 req/sec per user, 50/sec per tenant (see `main.go`)
+- **Security**: SSRF protection, security headers, CORS
+- **Tracing**: OpenTelemetry with Jaeger
+
+For production, customize the config:
 
 ```go
 config := platform.Config{
@@ -142,8 +159,10 @@ docker-compose down -v
 
 This removes all containers and volumes.
 
+
 ## Next Steps
 
-- Check the [advanced example](../advanced-app/) for more features
-- Read the [full documentation](../../docs/)
-- Explore [migration examples](../migration-examples/) from other auth libraries
+- Try the [minimal-app](../minimal-app) for the simplest setup
+- Try the [quickstart-app](../quickstart-app) for a full-featured demo
+- Try the [todo-api](../todo-api) for a real CRUD API with custom config
+- Read the [full documentation](../../../docs/)
