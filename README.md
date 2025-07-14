@@ -157,14 +157,20 @@ Choose the setup method that fits your needs:
 ```go
 // Quick start for demos and development
 authMesh, err := platform.NewWithDefaults(
-    "http://localhost:9443",  // Keycloak URL
-    "redis://localhost:6379", // Redis URL
+    "http://localhost:9443",  // Keycloak URL (for local development)
+    "redis://localhost:6379", // Redis URL (for local development)
 )
 
 // Production setup with custom configuration
 config := platform.DefaultConfig()
-config.Keycloak.URL = "https://auth.company.com"
-config.Redis.URL = "redis://redis-cluster:6379"
+config.Keycloak.URL = "https://auth.company.com"  // Production Keycloak
+config.Redis.URL = "redis://redis-cluster:6379"   // Production Redis cluster
+authMesh, err := platform.New(config)
+
+// Docker Compose setup (services communicate via internal names)
+config := platform.DefaultConfig()
+config.Keycloak.URL = "http://keycloak:9443"  // Internal service name
+config.Redis.URL = "redis://redis:6379"       // Internal service name  
 authMesh, err := platform.New(config)
 
 // Testing setup (no external dependencies)
@@ -313,10 +319,11 @@ Run the complete example with Keycloak, Redis, Prometheus, Grafana, and Jaeger:
 git clone https://github.com/AuthMesh/authmesh
 cd authmesh/examples/basic-app
 
-# Start the full stack
+# Start the full stack (includes Keycloak, Redis, Prometheus, Grafana, Jaeger)
 docker-compose up -d
 
-# Wait for services to be ready (about 30 seconds)
+# Wait for services to be ready (about 30-60 seconds)
+sleep 60
 docker-compose ps
 
 # Test the application
@@ -333,6 +340,8 @@ curl http://localhost:8080/        # Public endpoint
 | **Prometheus** | http://localhost:9090 | Metrics collection |
 | **Grafana** | http://localhost:3000 | Dashboards (admin/admin) |
 | **Jaeger** | http://localhost:16686 | Distributed tracing |
+
+> **Note:** These URLs use `localhost` because Docker Compose exposes services on your local machine. Inside the containers, services communicate using internal names like `keycloak:9443` and `redis:6379`.
 
 ### 🔍 **Exploring Features**
 
@@ -354,11 +363,12 @@ open http://localhost:3000
 
 ```bash
 # 1. Get a JWT token from Keycloak (configure realm first)
+# Note: You'll need to set up users and roles in Keycloak at http://localhost:9443
 # 2. Use token in Authorization header
 curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \
      http://localhost:8080/protected
 
-# 3. Test tenant isolation
+# 3. Test tenant isolation  
 curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \
      http://localhost:8080/t/tenant1/dashboard
 ```
@@ -438,10 +448,10 @@ func businessHandler(c *gin.Context) {
 
 Check the `examples/` directory for complete working examples:
 
-- **`simple-app/`**: Unified API demonstration (5 lines of setup)
-- **`basic-app/`**: Comprehensive setup with full observability stack  
-- **`advanced-app/`**: Advanced features and custom middleware
-- **`migration-examples/`**: Migration guides from other auth libraries
+- **`minimal-app/`**: Simplest possible setup (3 lines of code)
+- **`quickstart-app/`**: QuickStart API with comprehensive route examples  
+- **`todo-api/`**: Custom configuration with CRUD API and rate limiting
+- **`basic-app/`**: Full observability stack with Prometheus, Grafana, and Jaeger
 
 ### API Evolution
 
