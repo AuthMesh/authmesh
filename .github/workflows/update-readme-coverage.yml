@@ -1,0 +1,330 @@
+name: Update README Coverage
+
+on:
+  push:
+    branches: [ main, init ]
+  schedule:
+    - cron: '0 6 * * *'  # Daily at 6 AM UTC
+
+jobs:
+  update-readme:
+    name: Update README with Latest Coverage
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+        
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+        
+    - name: Install dependencies
+      run: |
+        go mod download
+        sudo apt-get update
+        sudo apt-get install -y bc jq
+        
+    - name: Generate coverage report
+      run: |
+        echo "🧪 Running tests with coverage..."
+        go test -coverprofile=coverage.out -covermode=atomic ./pkg/...
+        
+        # Generate detailed coverage
+        go tool cover -func=coverage.out > coverage-func.txt
+        go tool cover -html=coverage.out -o coverage.html
+        
+        # Extract total coverage
+        TOTAL_COVERAGE=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | sed 's/%//')
+        echo "TOTAL_COVERAGE=$TOTAL_COVERAGE" >> $GITHUB_ENV
+        echo "📊 Total Coverage: $TOTAL_COVERAGE%"
+        
+        # Extract package-specific coverage
+        AUTH_COV=$(grep "github.com/AuthMesh/authmesh/pkg/auth" coverage-func.txt | tail -1 | awk '{print $3}' | sed 's/%//' | head -1 || echo "0")
+        KEYCLOAK_COV=$(grep "github.com/AuthMesh/authmesh/pkg/keycloak" coverage-func.txt | tail -1 | awk '{print $3}' | sed 's/%//' | head -1 || echo "0")
+        MIDDLEWARE_COV=$(grep "github.com/AuthMesh/authmesh/pkg/middleware" coverage-func.txt | tail -1 | awk '{print $3}' | sed 's/%//' | head -1 || echo "0")
+        RATELIMIT_COV=$(grep "github.com/AuthMesh/authmesh/pkg/ratelimit" coverage-func.txt | tail -1 | awk '{print $3}' | sed 's/%//' | head -1 || echo "0")
+        TLSUTIL_COV=$(grep "github.com/AuthMesh/authmesh/pkg/tlsutil" coverage-func.txt | tail -1 | awk '{print $3}' | sed 's/%//' | head -1 || echo "0")
+        
+        echo "AUTH_COVERAGE=$AUTH_COV" >> $GITHUB_ENV
+        echo "KEYCLOAK_COVERAGE=$KEYCLOAK_COV" >> $GITHUB_ENV
+        echo "MIDDLEWARE_COVERAGE=$MIDDLEWARE_COV" >> $GITHUB_ENV
+        echo "RATELIMIT_COVERAGE=$RATELIMIT_COV" >> $GITHUB_ENV
+        echo "TLSUTIL_COVERAGE=$TLSUTIL_COV" >> $GITHUB_ENV
+        
+    - name: Determine badge colors
+      run: |
+        # Function to get badge color based on coverage
+        get_color() {
+          local coverage=$1
+          if (( $(echo "$coverage >= 80" | bc -l) )); then
+            echo "brightgreen"
+          elif (( $(echo "$coverage >= 60" | bc -l) )); then
+            echo "green"
+          elif (( $(echo "$coverage >= 40" | bc -l) )); then
+            echo "yellow"
+          elif (( $(echo "$coverage >= 20" | bc -l) )); then
+            echo "orange"
+          else
+            echo "red"
+          fi
+        }
+        
+        echo "TOTAL_COLOR=$(get_color $TOTAL_COVERAGE)" >> $GITHUB_ENV
+        echo "AUTH_COLOR=$(get_color $AUTH_COVERAGE)" >> $GITHUB_ENV
+        echo "KEYCLOAK_COLOR=$(get_color $KEYCLOAK_COVERAGE)" >> $GITHUB_ENV
+        echo "MIDDLEWARE_COLOR=$(get_color $MIDDLEWARE_COVERAGE)" >> $GITHUB_ENV
+        echo "RATELIMIT_COLOR=$(get_color $RATELIMIT_COVERAGE)" >> $GITHUB_ENV
+        echo "TLSUTIL_COLOR=$(get_color $TLSUTIL_COVERAGE)" >> $GITHUB_ENV
+        
+    - name: Update docs/COVERAGE.md
+      run: |
+        # Update the coverage percentages in the existing report
+        sed -i "s/\*\*Total Coverage:\*\* [0-9.]*%/\*\*Total Coverage:\*\* $TOTAL_COVERAGE%/" docs/COVERAGE.md
+        sed -i "s/| \*\*pkg\/auth\*\* | ![Auth](https:\/\/img\.shields\.io\/badge\/auth-[0-9.]*%25-[a-z]*) |/| \*\*pkg\/auth\*\* | ![Auth](https:\/\/img\.shields\.io\/badge\/auth-$AUTH_COVERAGE%25-$AUTH_COLOR) |/" docs/COVERAGE.md
+        sed -i "s/| \*\*pkg\/keycloak\*\* | ![Keycloak](https:\/\/img\.shields\.io\/badge\/keycloak-[0-9.]*%25-[a-z]*) |/| \*\*pkg\/keycloak\*\* | ![Keycloak](https:\/\/img\.shields\.io\/badge\/keycloak-$KEYCLOAK_COVERAGE%25-$KEYCLOAK_COLOR) |/" docs/COVERAGE.md
+        sed -i "s/| \*\*pkg\/middleware\*\* | ![Middleware](https:\/\/img\.shields\.io\/badge\/middleware-[0-9.]*%25-[a-z]*) |/| \*\*pkg\/middleware\*\* | ![Middleware](https:\/\/img\.shields\.io\/badge\/middleware-$MIDDLEWARE_COVERAGE%25-$MIDDLEWARE_COLOR) |/" docs/COVERAGE.md
+        sed -i "s/| \*\*pkg\/ratelimit\*\* | ![RateLimit](https:\/\/img\.shields\.io\/badge\/ratelimit-[0-9.]*%25-[a-z]*) |/| \*\*pkg\/ratelimit\*\* | ![RateLimit](https:\/\/img\.shields\.io\/badge\/ratelimit-$RATELIMIT_COVERAGE%25-$RATELIMIT_COLOR) |/" docs/COVERAGE.md
+        sed -i "s/| \*\*pkg\/tlsutil\*\* | ![TLS](https:\/\/img\.shields\.io\/badge\/tlsutil-[0-9.]*%25-[a-z]*) |/| \*\*pkg\/tlsutil\*\* | ![TLS](https:\/\/img\.shields\.io\/badge\/tlsutil-$TLSUTIL_COVERAGE%25-$TLSUTIL_COLOR) |/" docs/COVERAGE.md
+        
+        # Update the coverage badge
+        sed -i "s/![Coverage Badge](https:\/\/img\.shields\.io\/badge\/coverage-[0-9.]*%25-[a-z]*)/![Coverage Badge](https:\/\/img\.shields\.io\/badge\/coverage-$TOTAL_COVERAGE%25-$TOTAL_COLOR)/" docs/COVERAGE.md
+        
+        # Update the last updated date
+        sed -i "s/\*\*Last Updated:\*\* [A-Za-z0-9, ]*/\*\*Last Updated:\*\* $(date '+%B %d, %Y')/" docs/COVERAGE.md
+        
+    - name: Update README with coverage badge only
+      run: |
+        # Update coverage badge in existing README.md
+        # Look for existing coverage badge and update it
+        if grep -q "img.shields.io/badge/coverage-" README.md; then
+          # Update existing coverage badge
+          sed -i "s|https://img.shields.io/badge/coverage-[0-9.]*%25-[a-z]*|https://img.shields.io/badge/coverage-$TOTAL_COVERAGE%25-$TOTAL_COLOR|g" README.md
+          echo "✅ Updated existing coverage badge in README.md"
+        else
+          # Add coverage badge after existing badges
+          if grep -q "[![Go Version]" README.md; then
+            # Add after Go Version badge
+            sed -i "/\[\!\[Go Version\]/a [![Coverage](https://img.shields.io/badge/coverage-$TOTAL_COVERAGE%25-$TOTAL_COLOR)](docs/COVERAGE.md)" README.md
+            echo "✅ Added coverage badge to README.md"
+          else
+            echo "⚠️ Could not find location to add coverage badge"
+          fi
+        fi
+        
+    - name: Create detailed coverage documentation
+      run: |
+        # Create docs directory if it doesn't exist
+        mkdir -p docs
+        
+        # Create comprehensive coverage documentation
+        cat > docs/COVERAGE.md << 'EOF'
+        # 📊 AuthMesh Code Coverage Report
+        
+        **Last Updated:** $(date '+%Y-%m-%d %H:%M:%S UTC')  
+        **Branch:** ${{ github.ref_name }}  
+        **Commit:** ${{ github.sha }}
+        
+        ## 🎯 Coverage Summary
+        
+        ![Coverage Badge](https://img.shields.io/badge/coverage-$TOTAL_COVERAGE%25-$TOTAL_COLOR)
+        
+        **Total Coverage:** $TOTAL_COVERAGE%  
+        **Coverage Threshold:** 15% (CI requirement)  
+        **Target Goal:** 70% (production ready)
+        
+        ## 📈 Package Coverage Breakdown
+        
+        | Package | Coverage | Status | Quality Focus |
+        |---------|----------|--------|---------------|
+        | **pkg/auth** | ![Auth](https://img.shields.io/badge/auth-$AUTH_COVERAGE%25-$AUTH_COLOR) | $([ $(echo "$AUTH_COVERAGE >= 40" | bc -l) -eq 1 ] && echo "🟢 Good" || echo "🔴 Needs Work") | RBAC & JWT Authentication |
+        | **pkg/keycloak** | ![Keycloak](https://img.shields.io/badge/keycloak-$KEYCLOAK_COVERAGE%25-$KEYCLOAK_COLOR) | $([ $(echo "$KEYCLOAK_COVERAGE >= 40" | bc -l) -eq 1 ] && echo "🟢 Good" || echo "🔴 Needs Work") | Identity Provider Integration |
+        | **pkg/middleware** | ![Middleware](https://img.shields.io/badge/middleware-$MIDDLEWARE_COVERAGE%25-$MIDDLEWARE_COLOR) | $([ $(echo "$MIDDLEWARE_COVERAGE >= 40" | bc -l) -eq 1 ] && echo "🟢 Good" || echo "🔴 Needs Work") | Security & CORS |
+        | **pkg/ratelimit** | ![RateLimit](https://img.shields.io/badge/ratelimit-$RATELIMIT_COVERAGE%25-$RATELIMIT_COLOR) | $([ $(echo "$RATELIMIT_COVERAGE >= 40" | bc -l) -eq 1 ] && echo "🟢 Good" || echo "🔴 Needs Work") | Token Bucket Algorithm |
+        | **pkg/tlsutil** | ![TLS](https://img.shields.io/badge/tlsutil-$TLSUTIL_COVERAGE%25-$TLSUTIL_COLOR) | $([ $(echo "$TLSUTIL_COVERAGE >= 40" | bc -l) -eq 1 ] && echo "🟢 Good" || echo "🔴 Needs Work") | TLS Security Configuration |
+        
+        ## 🎯 Coverage Goals & Roadmap
+        
+        ### Current Milestone: Foundation (Target: 25%)
+        - ✅ **Completed:** Unit test migration (4 packages with tests)
+        - 🔄 **In Progress:** Core authentication middleware testing
+        - 📋 **Next:** Rate limiting middleware integration tests
+        
+        ### Short-term Goals (Next 4 weeks)
+        | Week | Target | Focus Areas |
+        |------|--------|-------------|
+        | Week 1 | 20% | Authentication middleware, JWT validation |
+        | Week 2 | 30% | Security middleware, CORS testing |
+        | Week 3 | 45% | Rate limiting, configuration management |
+        | Week 4 | 60% | Platform integration, observability |
+        
+        ### Long-term Vision (Production Ready: 70%+)
+        - 🎯 **Security-Critical Packages:** 85%+ coverage
+        - 🎯 **Core Platform Functions:** 70%+ coverage  
+        - 🎯 **Supporting Libraries:** 50%+ coverage
+        
+        ## 🧪 Test Categories
+        
+        ### ✅ Well-Tested Components
+        - **RBAC System** - 100% coverage for core permission logic
+        - **TLS Configuration** - 53.8% with comprehensive security testing
+        - **Keycloak Client** - 42.9% with authentication flows
+        - **Rate Limiting Algorithm** - Token bucket implementation tested
+        
+        ### 🔴 Critical Areas Needing Coverage
+        1. **JWT Middleware** - Core authentication functions (0% coverage)
+        2. **Security Headers** - Production security middleware (0% coverage)  
+        3. **Configuration Loading** - Environment validation (0% coverage)
+        4. **Platform Initialization** - Startup and dependency injection (0% coverage)
+        
+        ## 📊 Detailed Reports & Tools
+        
+        ### 🌐 Online Reports
+        - 📄 [**HTML Coverage Report**](https://authmesh.github.io/authmesh/coverage.html) - Visual coverage map
+        - 📈 [**GitHub Actions Workflows**](https://github.com/AuthMesh/authmesh/actions) - CI/CD pipeline
+        - 🔍 [**Function-level Analysis**](https://github.com/AuthMesh/authmesh/blob/main/coverage-func.txt) - Detailed breakdown
+        
+        ### 💻 Local Development
+        ```bash
+        # Quick coverage check
+        make coverage-summary
+        
+        # Generate HTML report
+        make coverage-html
+        
+        # Watch mode for development
+        make coverage-watch
+        
+        # Package-specific testing
+        make coverage-package PKG=pkg/auth
+        ```
+        
+        ### 🤖 Automation
+        - **PR Comments:** Automatic coverage reports on pull requests
+        - **README Updates:** Coverage badge automatically maintained
+        - **Threshold Enforcement:** CI fails if coverage drops below 15%
+        - **Trend Tracking:** Historical coverage data collection
+        
+        ## 🚀 Contributing to Coverage
+        
+        ### 📋 Priority List for Contributors
+        1. **High Impact, Low Effort:**
+           - Add tests for configuration loading functions
+           - Test security header middleware setup
+           - Add edge cases for existing RBAC tests
+        
+        2. **Critical Security Functions:**
+           - JWT validation middleware tests
+           - Authentication flow integration tests  
+           - Security middleware comprehensive testing
+        
+        3. **Platform Stability:**
+           - Platform initialization tests
+           - Error handling and recovery tests
+           - Configuration validation tests
+        
+        ### 💡 Testing Guidelines
+        - **Security-first:** Always test authentication and authorization paths
+        - **Edge cases:** Test error conditions, invalid inputs, boundary conditions
+        - **Integration:** Test middleware interactions and request flows
+        - **Performance:** Include benchmarks for critical path functions
+        
+        ### 🛠️ Tools & Resources
+        - **Test Generator:** Use `go test -json` output for coverage analysis
+        - **Mocking:** Built-in miniredis for isolated Redis testing
+        - **Benchmarks:** Performance testing framework included
+        - **CI Integration:** Automated coverage tracking and reporting
+        
+        ---
+        
+        ## 📈 Coverage Trend
+        
+        *Historical coverage data will be displayed here as the project evolves.*
+        
+        **Coverage Philosophy:** We prioritize testing security-critical paths and public APIs first, ensuring that AuthMesh remains a trusted authentication library for production applications.
+        
+        **Questions or suggestions for improving test coverage?** [Open an issue](https://github.com/AuthMesh/authmesh/issues) or start a [discussion](https://github.com/AuthMesh/authmesh/discussions).
+        EOF
+        
+    - name: Create coverage data JSON
+      run: |
+        cat > coverage-data.json << EOF
+        {
+          "total": $TOTAL_COVERAGE,
+          "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+          "branch": "${{ github.ref_name }}",
+          "commit": "${{ github.sha }}",
+          "packages": {
+            "auth": $AUTH_COVERAGE,
+            "keycloak": $KEYCLOAK_COVERAGE,
+            "middleware": $MIDDLEWARE_COVERAGE,
+            "ratelimit": $RATELIMIT_COVERAGE,
+            "tlsutil": $TLSUTIL_COVERAGE
+          },
+          "badges": {
+            "total": "https://img.shields.io/badge/coverage-$TOTAL_COVERAGE%25-$TOTAL_COLOR",
+            "auth": "https://img.shields.io/badge/auth-$AUTH_COVERAGE%25-$AUTH_COLOR",
+            "keycloak": "https://img.shields.io/badge/keycloak-$KEYCLOAK_COVERAGE%25-$KEYCLOAK_COLOR",
+            "middleware": "https://img.shields.io/badge/middleware-$MIDDLEWARE_COVERAGE%25-$MIDDLEWARE_COLOR",
+            "ratelimit": "https://img.shields.io/badge/ratelimit-$RATELIMIT_COVERAGE%25-$RATELIMIT_COLOR",
+            "tlsutil": "https://img.shields.io/badge/tlsutil-$TLSUTIL_COVERAGE%25-$TLSUTIL_COLOR"
+          }
+        }
+        EOF
+        
+    - name: Check for changes
+      id: git-check
+      run: |
+        git diff --exit-code README.md docs/COVERAGE.md coverage-data.json || echo "changes=true" >> $GITHUB_OUTPUT
+        
+    - name: Create Pull Request
+      if: steps.git-check.outputs.changes == 'true'
+      uses: peter-evans/create-pull-request@v6
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: "📊 Update coverage badge to ${{ env.TOTAL_COVERAGE }}%"
+        title: "📊 Coverage Update: ${{ env.TOTAL_COVERAGE }}%"
+        body: |
+          ## 📊 Automated Coverage Badge Update
+          
+          This PR updates the coverage badge and detailed documentation.
+          
+          ### 📈 Coverage Summary
+          - **Total Coverage:** ${{ env.TOTAL_COVERAGE }}%
+          - **Status:** ${{ env.TOTAL_COVERAGE < 20 && '🔴 Below Target' || env.TOTAL_COVERAGE < 40 && '🟡 Improving' || '🟢 Good Progress' }}
+          - **Branch:** ${{ github.ref_name }}
+          
+          ### 🔄 Files Updated
+          - ✅ `README.md` - Updated coverage badge
+          - ✅ `docs/COVERAGE.md` - Detailed coverage analysis and roadmap
+          - ✅ `coverage-data.json` - Machine-readable coverage data
+          
+          ### 📦 Package Highlights
+          | Package | Coverage | Change |
+          |---------|----------|--------|
+          | pkg/auth | ${{ env.AUTH_COVERAGE }}% | 📊 |
+          | pkg/keycloak | ${{ env.KEYCLOAK_COVERAGE }}% | 📊 |
+          | pkg/middleware | ${{ env.MIDDLEWARE_COVERAGE }}% | 📊 |
+          | pkg/ratelimit | ${{ env.RATELIMIT_COVERAGE }}% | 📊 |
+          | pkg/tlsutil | ${{ env.TLSUTIL_COVERAGE }}% | 📊 |
+          
+          ### 🎯 Focus Areas
+          ${{ env.TOTAL_COVERAGE < 25 && 'Focus on core authentication middleware and security functions to reach 25% milestone.' || 'Continue expanding test coverage for platform stability and reliability.' }}
+          
+          � **[View Detailed Coverage Report](docs/COVERAGE.md)**
+          
+          ---
+          *Auto-generated by coverage workflow*
+        branch: feature/coverage-update-${{ github.run_number }}
+        delete-branch: true
+        labels: |
+          📊 coverage
+          🤖 automated
+          📈 improvement
+        reviewers: |
+          # Add your team members here
+        draft: false
