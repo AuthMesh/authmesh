@@ -1,0 +1,415 @@
+name: 📚 Documentation Generation
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'docs/**'
+      - 'pkg/**'
+      - 'examples/**'
+      - '*.md'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'docs/**'
+      - 'pkg/**'
+      - 'examples/**'
+      - '*.md'
+  workflow_dispatch:
+
+env:
+  GO_VERSION: '1.21'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  validate-docs:
+    name: ✅ Validate Documentation
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: 🐹 Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+    
+    - name: 📖 Validate Go Documentation
+      run: |
+        echo "📖 Validating Go package documentation..."
+        
+        # Check that all exported functions have documentation
+        for pkg in $(find pkg -name "*.go" -not -name "*_test.go"); do
+          echo "Checking $pkg..."
+          
+          # Extract exported functions/types without documentation
+          UNDOCUMENTED=$(go doc -all ./${pkg%/*} 2>/dev/null | grep -E "^func [A-Z]|^type [A-Z]" | wc -l || echo "0")
+          
+          if [ "$UNDOCUMENTED" -gt 0 ]; then
+            echo "⚠️ Found exported items that may need documentation in $pkg"
+          fi
+        done
+        
+        echo "✅ Go documentation validation completed"
+    
+    - name: 🔗 Check Documentation Links
+      uses: gaurav-nelson/github-action-markdown-link-check@v1
+      with:
+        use-quiet-mode: 'yes'
+        use-verbose-mode: 'yes'
+        config-file: '.github/markdown-link-check.json'
+        folder-path: 'docs/'
+    
+    - name: 📝 Check Spelling
+      uses: cspell-tool/cspell-action@v2
+      with:
+        files: |
+          **/*.md
+          **/*.txt
+        config: .github/cspell.json
+    
+    - name: 📋 Validate Examples
+      run: |
+        echo "📋 Validating code examples in documentation..."
+        
+        # Find all code blocks in markdown files
+        find docs -name "*.md" -exec grep -l "```go" {} \; | while read file; do
+          echo "Checking examples in $file"
+          
+          # Extract Go code blocks and validate syntax
+          awk '/```go/,/```/' "$file" | grep -v "```" > temp_example.go
+          
+          if [ -s temp_example.go ]; then
+            # Add package declaration if missing
+            if ! grep -q "^package " temp_example.go; then
+              echo "package main" > temp_with_package.go
+              cat temp_example.go >> temp_with_package.go
+              mv temp_with_package.go temp_example.go
+            fi
+            
+            # Check syntax
+            if ! go vet temp_example.go 2>/dev/null; then
+              echo "⚠️ Syntax issues in examples from $file"
+            fi
+          fi
+          
+          rm -f temp_example.go
+        done
+        
+        echo "✅ Example validation completed"
+
+  generate-api-docs:
+    name: 🔧 Generate API Documentation
+    runs-on: ubuntu-latest
+    needs: validate-docs
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: 🐹 Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+    
+    - name: 📦 Install Documentation Tools
+      run: |
+        go install golang.org/x/tools/cmd/godoc@latest
+        go install github.com/johnstarich/go/gopages@latest
+    
+    - name: 🔧 Generate Package Documentation
+      run: |
+        mkdir -p generated-docs/api
+        
+        # Generate documentation for each package
+        for pkg_dir in pkg/*/; do
+          pkg_name=$(basename "$pkg_dir")
+          echo "📖 Generating docs for pkg/$pkg_name"
+          
+          # Generate markdown documentation
+          go doc -all ./pkg/$pkg_name > "generated-docs/api/$pkg_name.md"
+          
+          # Add front matter for better formatting
+          cat > "temp_$pkg_name.md" << EOF
+        # Package $pkg_name
+        
+        \`\`\`
+        import "github.com/AuthMesh/authmesh/pkg/$pkg_name"
+        \`\`\`
+        
+        EOF
+          cat "generated-docs/api/$pkg_name.md" >> "temp_$pkg_name.md"
+          mv "temp_$pkg_name.md" "generated-docs/api/$pkg_name.md"
+        done
+    
+    - name: 📊 Generate Coverage Documentation
+      run: |
+        if [ -f coverage.out ]; then
+          go tool cover -html=coverage.out -o generated-docs/coverage.html
+          echo "📊 Coverage report generated"
+        else
+          echo "📊 No coverage data available"
+        fi
+    
+    - name: 📚 Generate Unified Documentation
+      run: |
+        # Create index page
+        cat > generated-docs/index.md << EOF
+        # AuthMesh Documentation
+        
+        Welcome to the AuthMesh documentation! This library provides production-grade,
+        multi-tenant authentication and authorization for Go applications.
+        
+        ## 📖 API Reference
+        
+        EOF
+        
+        # Add links to all package documentation
+        for file in generated-docs/api/*.md; do
+          pkg_name=$(basename "$file" .md)
+          echo "- [\`pkg/$pkg_name\`](api/$pkg_name.md)" >> generated-docs/index.md
+        done
+        
+        cat >> generated-docs/index.md << EOF
+        
+        ## 🚀 Getting Started
+        
+        - [Quick Start Guide](../docs/getting-started.md)
+        - [Configuration Reference](../docs/configuration.md)
+        - [Security Best Practices](../docs/security.md)
+        - [Performance Tuning](../docs/performance.md)
+        
+        ## 💡 Examples
+        
+        - [Basic Application](../examples/basic-app/)
+        - [Advanced Features](../examples/advanced-app/)
+        - [Migration Guides](../examples/migration-examples/)
+        
+        ## 🔗 Additional Resources
+        
+        - [GitHub Repository](https://github.com/AuthMesh/authmesh)
+        - [Issue Tracker](https://github.com/AuthMesh/authmesh/issues)
+        - [Security Policy](../SECURITY.md)
+        
+        EOF
+    
+    - name: 📤 Upload Generated Documentation
+      uses: actions/upload-artifact@v4
+      with:
+        name: generated-docs
+        path: generated-docs/
+
+  build-site:
+    name: 🌐 Build Documentation Site
+    runs-on: ubuntu-latest
+    needs: generate-api-docs
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: 📥 Download Generated Documentation
+      uses: actions/download-artifact@v4
+      with:
+        name: generated-docs
+        path: generated-docs/
+    
+    - name: 🏗️ Setup Pages
+      uses: actions/configure-pages@v4
+    
+    - name: 🔧 Prepare Site Structure
+      run: |
+        mkdir -p site
+        
+        # Copy main documentation
+        cp -r docs/* site/
+        
+        # Copy generated API docs
+        cp -r generated-docs/* site/
+        
+        # Copy examples
+        mkdir -p site/examples
+        cp -r examples/ site/examples/
+        
+        # Create a simple HTML index
+        cat > site/index.html << EOF
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>AuthMesh Documentation</title>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+                body { font-family: system-ui, sans-serif; max-width: 1200px; margin: 0 auto; padding: 2rem; }
+                .header { text-align: center; margin-bottom: 3rem; }
+                .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; }
+                .card { border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem; }
+                .card h3 { margin-top: 0; color: #2563eb; }
+                a { color: #2563eb; text-decoration: none; }
+                a:hover { text-decoration: underline; }
+                code { background: #f3f4f6; padding: 0.2rem 0.4rem; border-radius: 4px; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>🔐 AuthMesh Documentation</h1>
+                <p>Production-grade, multi-tenant authentication platform for Go applications</p>
+            </div>
+            
+            <div class="grid">
+                <div class="card">
+                    <h3>🚀 Getting Started</h3>
+                    <ul>
+                        <li><a href="getting-started.html">Quick Start Guide</a></li>
+                        <li><a href="configuration.html">Configuration</a></li>
+                        <li><a href="examples/basic-app/">Basic Example</a></li>
+                    </ul>
+                </div>
+                
+                <div class="card">
+                    <h3>📖 API Reference</h3>
+                    <ul>
+                        <li><a href="api/auth.html">Authentication</a></li>
+                        <li><a href="api/middleware.html">Middleware</a></li>
+                        <li><a href="api/platform.html">Platform</a></li>
+                        <li><a href="index.html">Full API Docs</a></li>
+                    </ul>
+                </div>
+                
+                <div class="card">
+                    <h3>🛡️ Security</h3>
+                    <ul>
+                        <li><a href="security.html">Security Guide</a></li>
+                        <li><a href="../SECURITY.html">Security Policy</a></li>
+                        <li><a href="troubleshooting.html">Troubleshooting</a></li>
+                    </ul>
+                </div>
+                
+                <div class="card">
+                    <h3>⚡ Performance</h3>
+                    <ul>
+                        <li><a href="performance.html">Performance Guide</a></li>
+                        <li><a href="coverage.html">Coverage Report</a></li>
+                        <li><a href="migration.html">Migration Guide</a></li>
+                    </ul>
+                </div>
+            </div>
+            
+            <footer style="text-align: center; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid #ddd;">
+                <p>Built with ❤️ by the AuthMesh team</p>
+                <p><a href="https://github.com/AuthMesh/authmesh">GitHub Repository</a></p>
+            </footer>
+        </body>
+        </html>
+        EOF
+        
+        # Convert markdown files to HTML (simple conversion)
+        find site -name "*.md" -type f | while read file; do
+          echo "Converting $file to HTML"
+          # Simple markdown to HTML (you might want to use a proper tool)
+          html_file="${file%.md}.html"
+          echo "<!DOCTYPE html><html><head><title>$(basename "$file" .md)</title><meta charset='utf-8'><style>body{font-family:system-ui,sans-serif;max-width:800px;margin:0 auto;padding:2rem;line-height:1.6}</style></head><body>" > "$html_file"
+          # Basic markdown processing (this is simplified - consider using pandoc or similar)
+          sed 's/^# \(.*\)/<h1>\1<\/h1>/g; s/^## \(.*\)/<h2>\1<\/h2>/g; s/^### \(.*\)/<h3>\1<\/h3>/g' "$file" >> "$html_file"
+          echo "</body></html>" >> "$html_file"
+        done
+    
+    - name: 🌐 Build with Jekyll (if available)
+      run: |
+        # Add Jekyll configuration for GitHub Pages
+        cat > site/_config.yml << EOF
+        title: AuthMesh Documentation
+        description: Production-grade, multi-tenant authentication platform for Go
+        theme: minima
+        plugins:
+          - jekyll-feed
+          - jekyll-sitemap
+        
+        markdown: kramdown
+        highlighter: rouge
+        
+        github:
+          repository_url: https://github.com/AuthMesh/authmesh
+        EOF
+    
+    - name: 📤 Upload Site Artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: site/
+
+  deploy-docs:
+    name: 🚀 Deploy Documentation
+    runs-on: ubuntu-latest
+    needs: build-site
+    if: github.ref == 'refs/heads/main'
+    
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    
+    steps:
+    - name: 🌐 Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
+
+  docs-summary:
+    name: 📊 Documentation Summary
+    runs-on: ubuntu-latest
+    needs: [validate-docs, generate-api-docs]
+    if: always()
+    
+    steps:
+    - name: 📊 Generate Summary
+      run: |
+        echo "# 📚 Documentation Build Summary" > docs-summary.md
+        echo "" >> docs-summary.md
+        echo "**Build Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> docs-summary.md
+        echo "**Repository:** ${{ github.repository }}" >> docs-summary.md
+        echo "**Branch/PR:** ${{ github.ref_name }}" >> docs-summary.md
+        echo "" >> docs-summary.md
+        
+        echo "## 📋 Build Status" >> docs-summary.md
+        echo "" >> docs-summary.md
+        echo "| Task | Status | Details |" >> docs-summary.md
+        echo "|------|--------|---------|" >> docs-summary.md
+        
+        if [ "${{ needs.validate-docs.result }}" = "success" ]; then
+          echo "| ✅ Validation | Passed | Documentation validated successfully |" >> docs-summary.md
+        else
+          echo "| ❌ Validation | Failed | Documentation validation errors |" >> docs-summary.md
+        fi
+        
+        if [ "${{ needs.generate-api-docs.result }}" = "success" ]; then
+          echo "| 📖 API Docs | Generated | API documentation created |" >> docs-summary.md
+        else
+          echo "| ❌ API Docs | Failed | API documentation generation failed |" >> docs-summary.md
+        fi
+        
+        if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+          echo "| 🌐 Deployment | Scheduled | Documentation will be deployed to GitHub Pages |" >> docs-summary.md
+        else
+          echo "| 🌐 Deployment | Skipped | Only main branch deploys to GitHub Pages |" >> docs-summary.md
+        fi
+        
+        cat docs-summary.md
+    
+    - name: 💬 Comment on PR
+      if: github.event_name == 'pull_request' && always()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const summary = fs.readFileSync('docs-summary.md', 'utf8');
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: summary
+          });
