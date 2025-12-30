@@ -435,6 +435,9 @@ func TestPlatform_Metrics_Integration(t *testing.T) {
 	// Create a config with metrics enabled
 	config := DefaultConfig()
 	config.Keycloak.SkipJWKSInit = true
+	// Keep this unit test hermetic: readiness will probe Keycloak when configured.
+	// DefaultConfig() points at a local Keycloak URL that may not be running in CI.
+	config.Keycloak.URL = ""
 	config.Observability.EnableMetrics = true
 	config.Observability.AppName = "metrics-test-service"
 	config.Redis.URL = "" // No Redis to keep test simple

@@ -123,6 +123,18 @@ type Platform struct {
 	logger       *zap.Logger
 	metrics      *observability.Metrics
 	tracing      *observability.TracingProvider
+
+	// databasePinger optionally enables real DB readiness checks.
+	// When nil, DB health falls back to legacy (DatabaseURL-only) behavior.
+	databasePinger func(ctx context.Context) error
+}
+
+// SetDatabasePinger configures a callback used for database health checks.
+//
+// Typical usage from an app:
+//   platform.SetDatabasePinger(db.PingContext)
+func (p *Platform) SetDatabasePinger(ping func(ctx context.Context) error) {
+	p.databasePinger = ping
 }
 
 // New creates a new Platform instance with the given configuration
@@ -563,9 +575,17 @@ func (p *Platform) SetupRoutes(router *gin.Engine) {
 		})
 		
 		router.GET("/ready", func(c *gin.Context) {
-			c.JSON(200, gin.H{
-				"status":    "ready", 
+			up, services := p.readinessStatus(c.Request.Context())
+			statusCode := http.StatusOK
+			status := "ready"
+			if !up {
+				statusCode = http.StatusServiceUnavailable
+				status = "not_ready"
+			}
+			c.JSON(statusCode, gin.H{
+				"status":    status,
 				"timestamp": time.Now().UTC().Format(time.RFC3339),
+				"services":  services,
 			})
 		})
 		
@@ -580,10 +600,18 @@ func (p *Platform) SetupRoutes(router *gin.Engine) {
 		})
 
 		router.GET("/readyz", func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{
-				"status":  "ready",
-				"service": p.config.Observability.AppName,
-				"version": p.config.Observability.AppVersion,
+			up, services := p.readinessStatus(c.Request.Context())
+			statusCode := http.StatusOK
+			status := "ready"
+			if !up {
+				statusCode = http.StatusServiceUnavailable
+				status = "not_ready"
+			}
+			c.JSON(statusCode, gin.H{
+				"status":   status,
+				"service":  p.config.Observability.AppName,
+				"version":  p.config.Observability.AppVersion,
+				"services": services,
 			})
 		})
 	}
@@ -713,42 +741,51 @@ func (p *Platform) comprehensiveHealthCheck(c *gin.Context) {
 	allServicesUp := true
 	var failedServices []string
 
-	// Check database connection
-	dbStatus := p.checkDatabaseHealth()
+	// Check database connection (only if configured)
+	dbStatus := "skipped"
+	if p.databasePinger != nil || strings.TrimSpace(p.config.Observability.DatabaseURL) != "" {
+		dbStatus = p.checkDatabaseHealth(c.Request.Context())
+	}
 	services["db"] = dbStatus
-	if dbStatus != "up" {
+	if dbStatus == "down" {
 		allServicesUp = false
 		failedServices = append(failedServices, "db")
 	}
 
-	// Check Keycloak connection
-	keycloakStatus := p.checkKeycloakHealth()
+	// Check Keycloak connection (only if configured)
+	keycloakStatus := "skipped"
+	if strings.TrimSpace(p.config.Keycloak.URL) != "" {
+		keycloakStatus = p.checkKeycloakHealth()
+	}
 	services["keycloak"] = keycloakStatus
-	if keycloakStatus != "up" {
+	if keycloakStatus == "down" {
 		allServicesUp = false
 		failedServices = append(failedServices, "keycloak")
 	}
 
-	// Check NATS connection
-	natsStatus := p.checkNATSHealth()
+	// Check NATS connection (only if configured)
+	natsStatus := "skipped"
+	if strings.TrimSpace(p.config.Observability.NATSURL) != "" {
+		natsStatus = p.checkNATSHealth()
+	}
 	services["nats"] = natsStatus
-	if natsStatus != "up" {
+	if natsStatus == "down" {
 		allServicesUp = false
 		failedServices = append(failedServices, "nats")
 	}
 
-	// Check OpenTelemetry collector
+	// Check OpenTelemetry collector (disabled is not a failure)
 	otelStatus := p.checkOTelHealth()
 	services["otel"] = otelStatus
-	if otelStatus != "up" {
+	if otelStatus == "down" {
 		allServicesUp = false
 		failedServices = append(failedServices, "otel")
 	}
 
-	// Check Prometheus
+	// Check Prometheus (disabled is not a failure)
 	prometheusStatus := p.checkPrometheusHealth()
 	services["prometheus"] = prometheusStatus
-	if prometheusStatus != "up" {
+	if prometheusStatus == "down" {
 		allServicesUp = false
 		failedServices = append(failedServices, "prometheus")
 	}
@@ -773,15 +810,62 @@ func (p *Platform) comprehensiveHealthCheck(c *gin.Context) {
 	})
 }
 
-// checkDatabaseHealth checks if the database is accessible
-func (p *Platform) checkDatabaseHealth() string {
-	if p.config.Observability.DatabaseURL == "" {
-		return "down"
+func (p *Platform) readinessStatus(ctx context.Context) (bool, map[string]string) {
+	services := map[string]string{}
+
+	// DB: if a pinger is configured, use it; otherwise keep legacy behavior.
+	if p.databasePinger != nil || p.config.Observability.DatabaseURL != "" {
+		services["db"] = p.checkDatabaseHealth(ctx)
+	} else {
+		services["db"] = "skipped"
 	}
 
-	// For now, return "up" since we don't have a direct database health check
-	// In a real implementation, you'd use the database URL to check connectivity
-	// Example: db, err := sql.Open("postgres", p.config.Observability.DatabaseURL)
+	// Redis: check only if configured.
+	if strings.TrimSpace(p.config.Redis.URL) != "" {
+		if p.redisClient == nil {
+			services["redis"] = "down"
+		} else {
+			services["redis"] = p.checkRedisHealth()
+		}
+	} else {
+		services["redis"] = "skipped"
+	}
+
+	// Keycloak: check only if configured.
+	if strings.TrimSpace(p.config.Keycloak.URL) != "" {
+		services["keycloak"] = p.checkKeycloakHealth()
+	} else {
+		services["keycloak"] = "skipped"
+	}
+
+	allUp := true
+	for _, st := range services {
+		if st == "down" {
+			allUp = false
+			break
+		}
+	}
+	return allUp, services
+}
+
+// checkDatabaseHealth checks if the database is accessible.
+//
+// Behavior:
+// - If a database pinger is configured, it is used.
+// - Otherwise, fall back to legacy behavior based on DatabaseURL being non-empty.
+func (p *Platform) checkDatabaseHealth(ctx context.Context) string {
+	if p.databasePinger != nil {
+		checkCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+		if err := p.databasePinger(checkCtx); err != nil {
+			return "down"
+		}
+		return "up"
+	}
+
+	if strings.TrimSpace(p.config.Observability.DatabaseURL) == "" {
+		return "down"
+	}
 	return "up"
 }
 
