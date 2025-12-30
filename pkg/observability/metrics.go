@@ -1,6 +1,7 @@
 package observability
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -41,10 +42,23 @@ func NewMetrics() *Metrics {
 		),
 	}
 
-	// Register metrics
-	prometheus.MustRegister(&m.RequestDuration)
-	prometheus.MustRegister(&m.RequestsTotal)
-	prometheus.MustRegister(&m.ActiveRequests)
+	// Register metrics - use Register instead of MustRegister to handle duplicates
+	if err := prometheus.Register(&m.RequestDuration); err != nil {
+		// If already registered, that's fine - reuse the existing one
+		if _, ok := err.(prometheus.AlreadyRegisteredError); !ok {
+			panic(err)
+		}
+	}
+	if err := prometheus.Register(&m.RequestsTotal); err != nil {
+		if _, ok := err.(prometheus.AlreadyRegisteredError); !ok {
+			panic(err)
+		}
+	}
+	if err := prometheus.Register(&m.ActiveRequests); err != nil {
+		if _, ok := err.(prometheus.AlreadyRegisteredError); !ok {
+			panic(err)
+		}
+	}
 
 	return m
 }
@@ -58,9 +72,15 @@ func NewHealthMetrics(appName, appVersion string) {
 		},
 		[]string{"app_name", "version"},
 	)
-	
+
 	info.WithLabelValues(appName, appVersion).Set(1)
-	prometheus.MustRegister(info)
+	// Use Register instead of MustRegister to handle duplicates
+	if err := prometheus.Register(info); err != nil {
+		// If already registered, that's fine - reuse the existing one
+		if _, ok := err.(prometheus.AlreadyRegisteredError); !ok {
+			panic(err)
+		}
+	}
 }
 
 // MetricsMiddleware returns a middleware that records metrics
@@ -80,7 +100,7 @@ func MetricsMiddleware(m *Metrics) gin.HandlerFunc {
 
 		// Record metrics
 		duration := time.Since(start).Seconds()
-		statusCode := string(rune(c.Writer.Status()))
+		statusCode := strconv.Itoa(c.Writer.Status())
 
 		m.RequestDuration.WithLabelValues(c.Request.Method, path, statusCode).Observe(duration)
 		m.RequestsTotal.WithLabelValues(c.Request.Method, path, statusCode).Inc()
@@ -88,7 +108,7 @@ func MetricsMiddleware(m *Metrics) gin.HandlerFunc {
 	}
 }
 
-// SetupMetricsEndpoint sets up the /metrics endpoint
+// SetupMetricsEndpoint sets up the /metrics endpoint for Prometheus
 func SetupMetricsEndpoint(router *gin.Engine) {
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 }
