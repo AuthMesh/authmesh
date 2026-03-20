@@ -2,7 +2,7 @@ module github.com/AuthMesh/authmesh
 
 go 1.23.0
 
-toolchain go1.24.4
+toolchain go1.25.0
 
 require (
 	github.com/MicahParks/keyfunc v1.9.0
