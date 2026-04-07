@@ -2,9 +2,7 @@ package platform
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -14,6 +12,7 @@ import (
 	"github.com/AuthMesh/authmesh/pkg/middleware"
 	"github.com/AuthMesh/authmesh/pkg/observability"
 	"github.com/AuthMesh/authmesh/pkg/ratelimit"
+	"github.com/AuthMesh/authmesh/pkg/tlsutil"
 	"github.com/AuthMesh/authmesh/pkg/usermanagement"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -78,16 +77,16 @@ type RateLimitConfig struct {
 // ObservabilityConfig represents observability configuration
 // ObservabilityConfig represents observability configuration
 type ObservabilityConfig struct {
-	EnableMetrics   bool          `json:"enable_metrics"`
-	EnableTracing   bool          `json:"enable_tracing"`
-	AppName         string        `json:"app_name"`
-	AppVersion      string        `json:"app_version"`
-	TracingConfig   TracingConfig `json:"tracing"`
-	PrometheusURL   string        `json:"prometheus_url"`
-	OTelCollectorURL string       `json:"otel_collector_url"`
-	NATSURL         string        `json:"nats_url"`
-	DatabaseURL     string        `json:"database_url"`
-	KeycloakHealthURL string      `json:"keycloak_health_url"`
+	EnableMetrics     bool          `json:"enable_metrics"`
+	EnableTracing     bool          `json:"enable_tracing"`
+	AppName           string        `json:"app_name"`
+	AppVersion        string        `json:"app_version"`
+	TracingConfig     TracingConfig `json:"tracing"`
+	PrometheusURL     string        `json:"prometheus_url"`
+	OTelCollectorURL  string        `json:"otel_collector_url"`
+	NATSURL           string        `json:"nats_url"`
+	DatabaseURL       string        `json:"database_url"`
+	KeycloakHealthURL string        `json:"keycloak_health_url"`
 }
 
 // TracingConfig represents tracing configuration
@@ -113,16 +112,16 @@ type RouteConfig struct {
 
 // Platform represents the unified authentication platform
 type Platform struct {
-	config       Config
-	authmeshConfig *config.Config
-	jwksRegistry *auth.JWKSRegistry
-	redisClient  *redis.Client
-	userManager  *usermanagement.UserManager
-	userHandler  *usermanagement.UserManagementHandler
+	config           Config
+	authmeshConfig   *config.Config
+	jwksRegistry     *auth.JWKSRegistry
+	redisClient      *redis.Client
+	userManager      *usermanagement.UserManager
+	userHandler      *usermanagement.UserManagementHandler
 	rateLimitHandler *ratelimit.SuperAdminHandler
-	logger       *zap.Logger
-	metrics      *observability.Metrics
-	tracing      *observability.TracingProvider
+	logger           *zap.Logger
+	metrics          *observability.Metrics
+	tracing          *observability.TracingProvider
 
 	// databasePinger optionally enables real DB readiness checks.
 	// When nil, DB health falls back to legacy (DatabaseURL-only) behavior.
@@ -132,15 +131,14 @@ type Platform struct {
 // SetDatabasePinger configures a callback used for database health checks.
 //
 // Typical usage from an app:
-//   platform.SetDatabasePinger(db.PingContext)
+//
+//	platform.SetDatabasePinger(db.PingContext)
 func (p *Platform) SetDatabasePinger(ping func(ctx context.Context) error) {
 	p.databasePinger = ping
 }
 
 // New creates a new Platform instance with the given configuration
 func New(cfg Config) (*Platform, error) {
-	fmt.Printf("DEBUG: Platform.New() called with Redis URL: %s\n", cfg.Redis.URL)
-	
 	p := &Platform{
 		config: cfg,
 	}
@@ -173,38 +171,31 @@ func New(cfg Config) (*Platform, error) {
 
 	// Initialize Redis client if configured
 	if cfg.Redis.URL != "" {
-		fmt.Printf("DEBUG: Attempting to connect to Redis at %s\n", cfg.Redis.URL)
 		opts, err := redis.ParseURL(cfg.Redis.URL)
 		if err != nil {
-			fmt.Printf("DEBUG: Failed to parse Redis URL: %v\n", err)
 			return nil, fmt.Errorf("failed to parse Redis URL: %w", err)
 		}
-		
+
 		if cfg.Redis.Password != "" {
 			opts.Password = cfg.Redis.Password
 		}
 		opts.DB = cfg.Redis.DB
-		
+
 		p.redisClient = redis.NewClient(opts)
-		
+
 		// Test Redis connection
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := p.redisClient.Ping(ctx).Err(); err != nil {
-			fmt.Printf("DEBUG: Redis connection failed: %v\n", err)
 			p.logger.Warn("Redis connection failed, continuing without Redis", zap.Error(err))
 			p.redisClient = nil
-		} else {
-			fmt.Printf("DEBUG: Redis connection successful\n")
 		}
-	} else {
-		fmt.Printf("DEBUG: No Redis URL configured\n")
 	}
 
 	// Initialize metrics if enabled
 	if cfg.Observability.EnableMetrics {
 		p.metrics = observability.NewMetrics()
-		
+
 		// Initialize health metrics
 		if cfg.Observability.AppName != "" {
 			observability.NewHealthMetrics(
@@ -225,7 +216,7 @@ func New(cfg Config) (*Platform, error) {
 			SampleRate:     cfg.Observability.TracingConfig.SampleRate,
 			Enabled:        true,
 		}
-		
+
 		// Use defaults if not configured
 		if tracingConfig.ServiceName == "" {
 			tracingConfig.ServiceName = cfg.Observability.AppName
@@ -246,47 +237,36 @@ func New(cfg Config) (*Platform, error) {
 	}
 
 	// Initialize UserManager and handler
-	fmt.Printf("DEBUG: Checking redisClient status: %v\n", p.redisClient != nil)
 	p.logger.Info("Platform initialization: checking Redis status", zap.Bool("redis_available", p.redisClient != nil))
-	log.Printf("DIRECT LOG: Redis client status: %v", p.redisClient != nil)
 	if p.redisClient != nil {
-		fmt.Printf("DEBUG: Redis client available, initializing UserManager\n")
 		userManagerConfig := usermanagement.UserManagerConfig{
 			KeycloakURL: cfg.Keycloak.URL,
 			RedisClient: p.redisClient,
 			Logger:      p.logger,
 		}
-		
+
 		userManager, err := usermanagement.NewUserManager(userManagerConfig)
 		if err != nil {
-			fmt.Printf("DEBUG: Failed to initialize UserManager: %v\n", err)
 			p.logger.Warn("Failed to initialize UserManager", zap.Error(err))
 		} else {
-			fmt.Printf("DEBUG: UserManager initialized successfully\n")
 			p.userManager = userManager
-			
+
 			// Initialize HTTP handler
 			userHandler, err := usermanagement.NewUserManagementHandler(userManager, p.logger)
 			if err != nil {
-				fmt.Printf("DEBUG: Failed to initialize UserManagementHandler: %v\n", err)
 				p.logger.Warn("Failed to initialize UserManagementHandler", zap.Error(err))
 			} else {
-				fmt.Printf("DEBUG: UserManagementHandler initialized successfully\n")
 				p.userHandler = userHandler
 			}
-			
+
 			// Initialize rate limit handler
 			rateLimitHandler, err := ratelimit.NewSuperAdminHandler(p.redisClient, p.logger)
 			if err != nil {
-				fmt.Printf("DEBUG: Failed to initialize RateLimitHandler: %v\n", err)
 				p.logger.Warn("Failed to initialize RateLimitHandler", zap.Error(err))
 			} else {
-				fmt.Printf("DEBUG: RateLimitHandler initialized successfully\n")
 				p.rateLimitHandler = rateLimitHandler
 			}
 		}
-	} else {
-		fmt.Printf("DEBUG: Redis client is nil, skipping UserManager initialization\n")
 	}
 
 	return p, nil
@@ -384,29 +364,29 @@ func (p *Platform) setupCORS() gin.HandlerFunc {
 func (p *Platform) SetupMiddleware(router *gin.Engine) {
 	// Recovery middleware (should be first)
 	router.Use(gin.Recovery())
-	
-	// Request ID middleware  
+
+	// Request ID middleware
 	router.Use(middleware.RequestIDMiddleware())
-	
+
 	// Security middleware
 	if p.config.Security.EnableSecurityHeaders {
 		router.Use(middleware.SecurityHeadersMiddleware())
 		router.Use(auth.SecurityMiddleware())
 	}
-	
+
 	// CORS middleware - use platform's CORS configuration
 	router.Use(p.setupCORS())
-	
+
 	// Rate limiting middleware (if enabled and Redis is available)
 	if p.config.RateLimit.Enabled && p.redisClient != nil {
 		router.Use(middleware.RateLimitMiddleware(p.redisClient, p.logger))
 	}
-	
+
 	// Structured logging middleware
 	if p.config.Observability.EnableMetrics {
 		router.Use(middleware.AuditLogMiddleware())
 	}
-	
+
 	// Metrics middleware (if enabled)
 	if p.config.Observability.EnableMetrics && p.metrics != nil {
 		router.Use(observability.MetricsMiddleware(p.metrics))
@@ -419,7 +399,7 @@ func (p *Platform) AuthMiddleware(requiredRole ...string) gin.HandlerFunc {
 		// Return a single middleware that combines both auth and role checking
 		return gin.HandlerFunc(func(c *gin.Context) {
 			// Do JWT authentication inline (without calling c.Next())
-			
+
 			// Extract and validate Authorization header
 			authHeader := c.GetHeader("Authorization")
 			if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
@@ -451,7 +431,7 @@ func (p *Platform) AuthMiddleware(requiredRole ...string) gin.HandlerFunc {
 
 			// Set all required context variables (like RequireAuth does)
 			c.Set("claims", verifiedClaims)
-			
+
 			// Extract and set user info
 			userInfo := make(map[string]interface{})
 			if sub, ok := verifiedClaims["sub"].(string); ok {
@@ -470,7 +450,7 @@ func (p *Platform) AuthMiddleware(requiredRole ...string) gin.HandlerFunc {
 				userInfo["tenant_id"] = tenantID
 			}
 			c.Set("user_info", userInfo)
-			
+
 			// Extract and set user roles
 			userRoles := []string{}
 			if realmAccess, ok := verifiedClaims["realm_access"].(map[string]interface{}); ok {
@@ -483,7 +463,7 @@ func (p *Platform) AuthMiddleware(requiredRole ...string) gin.HandlerFunc {
 				}
 			}
 			c.Set("user_roles", userRoles)
-			
+
 			// Check if user is suspended first
 			for _, r := range userRoles {
 				if r == "suspended" {
@@ -494,7 +474,7 @@ func (p *Platform) AuthMiddleware(requiredRole ...string) gin.HandlerFunc {
 					return
 				}
 			}
-			
+
 			// Check if user has the required role
 			hasRole := false
 			for _, r := range userRoles {
@@ -512,7 +492,7 @@ func (p *Platform) AuthMiddleware(requiredRole ...string) gin.HandlerFunc {
 				})
 				return
 			}
-			
+
 			// Both auth and role check passed, continue to handler
 			c.Next()
 		})
@@ -531,7 +511,7 @@ func (p *Platform) OptionalAuthMiddleware() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		
+
 		// Auth header exists, try to validate it
 		authMiddleware := auth.RequireAuth()
 		authMiddleware(c)
@@ -540,7 +520,6 @@ func (p *Platform) OptionalAuthMiddleware() gin.HandlerFunc {
 
 // TenantMiddleware returns a tenant isolation middleware
 func (p *Platform) TenantMiddleware() gin.HandlerFunc {
-	fmt.Println("DEBUG: Platform.TenantMiddleware() called - returning auth.TenantMiddleware()")
 	return auth.TenantMiddleware()
 }
 
@@ -573,7 +552,7 @@ func (p *Platform) SetupRoutes(router *gin.Engine) {
 				"timestamp": time.Now().UTC().Format(time.RFC3339),
 			})
 		})
-		
+
 		router.GET("/ready", func(c *gin.Context) {
 			up, services := p.readinessStatus(c.Request.Context())
 			statusCode := http.StatusOK
@@ -588,7 +567,7 @@ func (p *Platform) SetupRoutes(router *gin.Engine) {
 				"services":  services,
 			})
 		})
-		
+
 		// Common health check variants for different platforms
 		router.GET("/healthz", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
@@ -624,14 +603,14 @@ func (p *Platform) SetupRoutes(router *gin.Engine) {
 			if welcomeMessage == "" {
 				welcomeMessage = fmt.Sprintf("Welcome to %s", p.config.Observability.AppName)
 			}
-			
+
 			c.JSON(http.StatusOK, gin.H{
 				"message":    welcomeMessage,
 				"version":    p.config.Observability.AppVersion,
 				"powered_by": "AuthMesh",
 				"endpoints": gin.H{
 					"health":     "/health, /healthz",
-					"ready":      "/ready, /readyz", 
+					"ready":      "/ready, /readyz",
 					"metrics":    "/metrics",
 					"auth":       "/whoami",
 					"api":        "/api/v1",
@@ -643,12 +622,12 @@ func (p *Platform) SetupRoutes(router *gin.Engine) {
 
 	// Comprehensive health check endpoint (as expected by tests)
 	router.GET("/api/v1/health", p.comprehensiveHealthCheck)
-	
+
 	// Metrics endpoint (if enabled)
 	if p.config.Observability.EnableMetrics {
 		observability.SetupMetricsEndpoint(router)
 	}
-	
+
 	// User info endpoint
 	router.GET("/whoami", p.AuthMiddleware(), auth.WhoAmIHandler)
 
@@ -657,7 +636,7 @@ func (p *Platform) SetupRoutes(router *gin.Engine) {
 		p.setupAdminRoutes(router)
 	}
 
-	// Standard Tenant API patterns  
+	// Standard Tenant API patterns
 	if p.config.Routes.EnableStandardTenantRoutes {
 		p.setupTenantRoutes(router)
 	}
@@ -704,11 +683,11 @@ func (p *Platform) Shutdown(ctx context.Context) error {
 			return fmt.Errorf("failed to close Redis client: %w", err)
 		}
 	}
-	
+
 	if p.logger != nil {
 		p.logger.Sync()
 	}
-	
+
 	return nil
 }
 
@@ -731,8 +710,19 @@ func NewForTesting(serviceName string) (*Platform, error) {
 	config.Observability.AppName = serviceName
 	config.Observability.EnableMetrics = false
 	config.Observability.EnableTracing = false
-	
+
 	return New(config)
+}
+
+// QuickStart creates a platform with minimal configuration for quick demos and development.
+// No external dependencies (Keycloak, Redis) are required.
+func QuickStart(appName string) (*Platform, error) {
+	return NewForTesting(appName)
+}
+
+// GetTracingProvider returns the tracing provider (may be nil if tracing is not enabled)
+func (p *Platform) GetTracingProvider() *observability.TracingProvider {
+	return p.tracing
 }
 
 // comprehensiveHealthCheck provides detailed health status for all services
@@ -891,39 +881,28 @@ func (p *Platform) checkKeycloakHealth() string {
 		return "down"
 	}
 
-	// Create client with TLS config for self-signed certificates
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	client := &http.Client{
-		Timeout:   3 * time.Second,
-		Transport: tr,
-	}
-	
+	// Create client with TLS config (reuse the secure client from tlsutil)
+	client := tlsutil.CreateSecureHTTPClient()
+	client.Timeout = 3 * time.Second
+
 	// Use management URL for health check if available
 	healthURL := p.config.Observability.KeycloakHealthURL
 	if healthURL == "" {
 		// Fallback to main URL with health endpoint
 		healthURL = p.config.Keycloak.URL + "/health"
 	}
-	
-	// Debug logging
-	fmt.Printf("[DEBUG] Checking Keycloak health at: %s\n", healthURL)
-	
+
 	resp, err := client.Get(healthURL)
 	if err != nil {
 		// Fallback: try the realm endpoint
 		realmURL := p.config.Keycloak.URL + "/realms/" + p.config.Keycloak.Realm
-		fmt.Printf("[DEBUG] Health check failed, trying realm endpoint: %s\n", realmURL)
 		resp, err = client.Get(realmURL)
 		if err != nil {
-			fmt.Printf("[DEBUG] Realm check also failed: %v\n", err)
 			return "down"
 		}
 	}
 	defer resp.Body.Close()
 
-	fmt.Printf("[DEBUG] Keycloak health response status: %d\n", resp.StatusCode)
 	if resp.StatusCode >= 200 && resp.StatusCode < 500 {
 		return "up"
 	}
@@ -1016,7 +995,7 @@ func (p *Platform) setupAdminRoutes(router *gin.Engine) {
 			if userRoles == nil {
 				userRoles = []string{}
 			}
-			
+
 			c.JSON(http.StatusOK, gin.H{
 				"message": "Admin information",
 				"user":    userSub,
@@ -1030,7 +1009,7 @@ func (p *Platform) setupAdminRoutes(router *gin.Engine) {
 			c.JSON(http.StatusOK, gin.H{
 				"app_name":    p.config.Observability.AppName,
 				"app_version": p.config.Observability.AppVersion,
-				"environment": "production", // Could be from config
+				"environment": "production",                    // Could be from config
 				"uptime":      time.Since(time.Now()).String(), // Placeholder
 			})
 		})
@@ -1048,7 +1027,7 @@ func (p *Platform) setupTenantRoutes(router *gin.Engine) {
 		tenant.GET("/info", func(c *gin.Context) {
 			tenantID := c.Param("tenant_id")
 			userSub, _ := auth.GetUserSubjectFromContext(c)
-			
+
 			c.JSON(http.StatusOK, gin.H{
 				"message":   "Tenant information",
 				"tenant":    tenantID,
@@ -1075,7 +1054,7 @@ func (p *Platform) setupTenantRoutes(router *gin.Engine) {
 			tenantAdmin.GET("/info", func(c *gin.Context) {
 				tenantID := c.Param("tenant_id")
 				userSub, _ := auth.GetUserSubjectFromContext(c)
-				
+
 				c.JSON(http.StatusOK, gin.H{
 					"message":   "Tenant admin information",
 					"tenant_id": tenantID,
@@ -1089,8 +1068,6 @@ func (p *Platform) setupTenantRoutes(router *gin.Engine) {
 
 // setupUserManagementRoutes sets up user management routes (if user handler is available)
 func (p *Platform) setupUserManagementRoutes(router *gin.Engine) {
-	fmt.Printf("DEBUG: userHandler is available, registering user management routes\n")
-	
 	// Superadmin user management endpoints
 	superadmin := router.Group("/superadmin")
 	superadmin.Use(p.AuthMiddleware())
@@ -1100,12 +1077,10 @@ func (p *Platform) setupUserManagementRoutes(router *gin.Engine) {
 	}
 
 	// API v1 Superadmin endpoints (for compatibility with tests)
-	fmt.Printf("DEBUG: registering /api/v1/superadmin group\n")
 	apiSuperadmin := router.Group("/api/v1/superadmin")
 	apiSuperadmin.Use(p.AuthMiddleware())
 	apiSuperadmin.Use(p.SuperAdminMiddleware())
 	{
-		fmt.Printf("DEBUG: registering POST /api/v1/superadmin/realms\n")
 		apiSuperadmin.POST("/realms", func(c *gin.Context) {
 			var realmRequest map[string]interface{}
 			if err := c.ShouldBindJSON(&realmRequest); err != nil {
@@ -1117,10 +1092,9 @@ func (p *Platform) setupUserManagementRoutes(router *gin.Engine) {
 				"realm":   realmRequest,
 			})
 		})
-		
+
 		// Rate limit endpoints (if rate limit handler is available)
 		if p.rateLimitHandler != nil {
-			fmt.Printf("DEBUG: registering rate limit endpoints\n")
 			apiSuperadmin.PUT("/realms/:realm_id/rate-limits", p.rateLimitHandler.SetRealmRateLimits)
 			apiSuperadmin.GET("/realms/:realm_id/rate-limits", p.rateLimitHandler.GetRealmRateLimits)
 		}

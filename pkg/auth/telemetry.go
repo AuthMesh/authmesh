@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -151,13 +152,18 @@ func (t *Telemetry) RecordAuthRequest(ctx context.Context, tenantID, userID, rol
 	go exportTelemetryToJSON()
 }
 
-// exportTelemetryToJSON exports telemetry events to /tmp/telemetry.json
+// exportTelemetryToJSON exports telemetry events to a telemetry file
 func exportTelemetryToJSON() {
 	if len(telemetryEvents) == 0 {
 		return
 	}
 
-	file, err := os.OpenFile("/tmp/telemetry.json", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	telemetryPath := os.Getenv("TELEMETRY_FILE_PATH")
+	if telemetryPath == "" {
+		telemetryPath = filepath.Join(os.TempDir(), "telemetry.json")
+	}
+
+	file, err := os.OpenFile(telemetryPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
 		log.Printf("Error opening telemetry file: %v", err)
 		return

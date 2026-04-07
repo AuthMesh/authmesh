@@ -12,10 +12,8 @@ import (
 // TenantMiddleware extracts tenant information from JWT claims and enforces multi-tenant isolation
 func TenantMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		fmt.Printf("DEBUG: TenantMiddleware function called for path: %s\n", c.Request.URL.Path)
 		// Get full claims from context (set by JWT middleware)
 		claimsInterface, exists := c.Get("claims")
-		fmt.Printf("DEBUG: TenantMiddleware - claims exists: %v\n", exists)
 		if !exists {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 			c.Abort()
@@ -32,36 +30,23 @@ func TenantMiddleware() gin.HandlerFunc {
 		// Extract tenant_id from JWT claims
 		tenantID, err := extractTenantIDFromClaims(userClaims)
 		if err != nil {
-			fmt.Printf("DEBUG: TenantMiddleware - failed to extract tenant_id: %v\n", err)
-			fmt.Printf("DEBUG: TenantMiddleware - available claims: %v\n", userClaims)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or missing tenant_id in token"})
 			c.Abort()
 			return
 		}
-		fmt.Printf("DEBUG: TenantMiddleware - extracted tenant_id: %s\n", tenantID)
 
-	// Check if this is a tenant-specific route (/t/{tenant_id}/...)
-	pathTenantID := c.Param("tenant_id")
-	fmt.Printf("DEBUG: TenantMiddleware - pathTenantID from c.Param('tenant_id'): '%s'\n", pathTenantID)
-	fmt.Printf("DEBUG: TenantMiddleware - tenantID from JWT: '%s'\n", tenantID)
-	fmt.Printf("DEBUG: TenantMiddleware - full path: '%s'\n", c.Request.URL.Path)
-	
-	if pathTenantID != "" {
-			fmt.Printf("DEBUG: TenantMiddleware - entering tenant validation logic\n")
+		// Check if this is a tenant-specific route (/t/{tenant_id}/...)
+		pathTenantID := c.Param("tenant_id")
+
+		if pathTenantID != "" {
 			// Validate that the JWT tenant_id matches the route tenant_id
 			if tenantID != pathTenantID {
-				fmt.Printf("DEBUG: TenantMiddleware - TENANT MISMATCH - denying access\n")
 				c.JSON(http.StatusForbidden, gin.H{
 					"error": "Access denied: token tenant_id does not match requested tenant",
-					"details": gin.H{
-						"token_tenant_id":     tenantID,
-						"requested_tenant_id": pathTenantID,
-					},
 				})
 				c.Abort()
 				return
 			}
-			fmt.Printf("DEBUG: TenantMiddleware - TENANT MATCH - allowing access\n")
 		}
 
 		// Set context values for downstream handlers
@@ -76,7 +61,7 @@ func extractTenantIDFromClaims(claims jwt.MapClaims) (string, error) {
 	if tenantID, ok := claims["tenant_id"].(string); ok && tenantID != "" {
 		return tenantID, nil
 	}
-	
+
 	// Fallback: extract realm from issuer claim (standard approach for Keycloak)
 	if iss, ok := claims["iss"].(string); ok {
 		// Extract realm from issuer URL
@@ -92,6 +77,6 @@ func extractTenantIDFromClaims(claims jwt.MapClaims) (string, error) {
 			return iss[realmStart : realmStart+realmEnd], nil
 		}
 	}
-	
+
 	return "", fmt.Errorf("tenant_id not found in token claims or issuer")
 }

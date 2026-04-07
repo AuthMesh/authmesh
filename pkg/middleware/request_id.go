@@ -15,7 +15,10 @@ func RequestIDMiddleware() gin.HandlerFunc {
 		if requestID == "" {
 			// Generate a new request ID
 			bytes := make([]byte, 16)
-			rand.Read(bytes)
+			if _, err := rand.Read(bytes); err != nil {
+				c.AbortWithStatus(500)
+				return
+			}
 			requestID = hex.EncodeToString(bytes)
 		}
 

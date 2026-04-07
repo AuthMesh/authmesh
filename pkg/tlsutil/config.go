@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -34,17 +33,6 @@ func CreateSecureHTTPClient() *http.Client {
 	trustedHostsRaw := os.Getenv("TLS_TRUSTED_HOSTS")
 	trustedHosts := strings.Split(trustedHostsRaw, ",")
 
-	fmt.Printf("[DEBUG] TLS Configuration:\n")
-	fmt.Printf("[DEBUG] - TLS_CA_CERT_PATH: '%s'\n", caCertPath)
-	fmt.Printf("[DEBUG] - TLS_ALLOW_SELF_SIGNED: %t\n", allowSelfSigned)
-	fmt.Printf("[DEBUG] - TLS_TRUSTED_HOSTS (raw): '%s'\n", trustedHostsRaw)
-	fmt.Printf("[DEBUG] - TLS_TRUSTED_HOSTS (split): %v\n", trustedHosts)
-	fmt.Printf("[DEBUG] - len(trustedHosts): %d\n", len(trustedHosts))
-	if len(trustedHosts) > 0 {
-		fmt.Printf("[DEBUG] - trustedHosts[0]: '%s'\n", trustedHosts[0])
-		fmt.Printf("[DEBUG] - trustedHosts[0] != '': %t\n", trustedHosts[0] != "")
-	}
-
 	// Load custom CA certificate if provided
 	if caCertPath != "" {
 		if err := loadCACertificate(tlsConfig, caCertPath); err != nil {
@@ -57,11 +45,6 @@ func CreateSecureHTTPClient() *http.Client {
 
 	// Configure self-signed certificate handling for trusted hosts
 	if allowSelfSigned && len(trustedHosts) > 0 && trustedHosts[0] != "" {
-		fmt.Printf("[DEBUG] Conditions met for self-signed certificate handling:\n")
-		fmt.Printf("[DEBUG] - allowSelfSigned: %t\n", allowSelfSigned)
-		fmt.Printf("[DEBUG] - len(trustedHosts) > 0: %t\n", len(trustedHosts) > 0)
-		fmt.Printf("[DEBUG] - trustedHosts[0] != '': %t\n", trustedHosts[0] != "")
-
 		// SECURITY NOTE: This configuration allows self-signed certificates
 		// only for explicitly trusted hosts. This is secure because:
 		// 1. We still verify the certificate belongs to a trusted host
@@ -78,15 +61,13 @@ func CreateSecureHTTPClient() *http.Client {
 			// and use our custom verifier to check the hostname matches our trusted hosts
 			tlsConfig.InsecureSkipVerify = true
 			tlsConfig.VerifyPeerCertificate = createHostVerifier(trustedHosts)
-			fmt.Printf("[DEBUG] Set InsecureSkipVerify=true and VerifyPeerCertificate function\n")
 		} else {
 			log.Printf("[INFO] Successfully loaded self-signed certificate as trusted CA")
 		}
 
-		fmt.Printf("[INFO] Allowing self-signed certificates for trusted hosts: %v\n", trustedHosts)
+		log.Printf("[INFO] Allowing self-signed certificates for trusted hosts: %v", trustedHosts)
 	} else if allowSelfSigned {
-		fmt.Printf("[ERROR] TLS_ALLOW_SELF_SIGNED is true but no TLS_TRUSTED_HOSTS specified\n")
-		fmt.Printf("[ERROR] This is a security risk. Please specify trusted hosts or provide a CA certificate.\n")
+		log.Printf("[ERROR] TLS_ALLOW_SELF_SIGNED is true but no TLS_TRUSTED_HOSTS specified")
 	}
 
 	transport := &http.Transport{
@@ -98,7 +79,7 @@ func CreateSecureHTTPClient() *http.Client {
 
 // loadCACertificate loads a custom CA certificate from file
 func loadCACertificate(tlsConfig *tls.Config, caCertPath string) error {
-	caCert, err := ioutil.ReadFile(caCertPath)
+	caCert, err := os.ReadFile(caCertPath)
 	if err != nil {
 		return fmt.Errorf("failed to read CA certificate file %s: %w", caCertPath, err)
 	}
@@ -121,7 +102,7 @@ func loadSelfSignedCertAsCA(tlsConfig *tls.Config, certPath string) error {
 	}
 
 	// Read the certificate file
-	certPEM, err := ioutil.ReadFile(certPath)
+	certPEM, err := os.ReadFile(certPath)
 	if err != nil {
 		return fmt.Errorf("failed to read certificate file %s: %w", certPath, err)
 	}

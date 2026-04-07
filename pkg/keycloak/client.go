@@ -3,6 +3,8 @@ package keycloak
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -109,8 +111,9 @@ func (c *Client) GetAdminToken(clientID, clientSecret string) (string, error) {
 	)
 	defer span.End()
 
-	// Check cache first
-	cacheKey := fmt.Sprintf("%s:%s", clientID, clientSecret)
+	// Check cache first - use hash to avoid storing secret in memory as map key
+	hash := sha256.Sum256([]byte(clientID + ":" + clientSecret))
+	cacheKey := hex.EncodeToString(hash[:])
 	c.mu.Lock()
 	if entry, exists := c.tokenCache[cacheKey]; exists {
 		// Check if token is still valid (with 30s buffer)
@@ -253,8 +256,9 @@ func (c *Client) GetClientCredentialsToken(realm, clientID, clientSecret string)
 	)
 	defer span.End()
 
-	// Check cache first
-	cacheKey := fmt.Sprintf("%s:%s:%s", realm, clientID, clientSecret)
+	// Check cache first - use hash to avoid storing secret in memory as map key
+	hash := sha256.Sum256([]byte(realm + ":" + clientID + ":" + clientSecret))
+	cacheKey := hex.EncodeToString(hash[:])
 	c.mu.Lock()
 	if entry, exists := c.tokenCache[cacheKey]; exists {
 		// Check if token is still valid (with 30s buffer)
@@ -278,12 +282,10 @@ func (c *Client) GetClientCredentialsToken(realm, clientID, clientSecret string)
 	data.Set("client_id", clientID)
 	data.Set("client_secret", clientSecret)
 
-	// DEBUG: Log the request details
-	c.logger.Info("DEBUG: Making client credentials request",
+	c.logger.Debug("Making client credentials request",
 		zap.String("url", tokenURL),
 		zap.String("client_id", clientID),
-		zap.String("realm", realm),
-		zap.String("form_data", data.Encode()))
+		zap.String("realm", realm))
 
 	req, err := http.NewRequestWithContext(ctx, "POST", tokenURL, strings.NewReader(data.Encode()))
 	if err != nil {
@@ -315,10 +317,8 @@ func (c *Client) GetClientCredentialsToken(realm, clientID, clientSecret string)
 		c.recordError("get_client_credentials_token")
 		span.SetAttributes(attribute.Int("http.status_code", resp.StatusCode))
 
-		// DEBUG: Log response details for debugging
-		c.logger.Error("DEBUG: Client credentials request failed",
-			zap.Int("status_code", resp.StatusCode),
-			zap.String("response_body", string(respBody)))
+		c.logger.Error("Client credentials request failed",
+			zap.Int("status_code", resp.StatusCode))
 
 		var errorResp ErrorResponse
 		if jsonErr := json.Unmarshal(respBody, &errorResp); jsonErr == nil {
@@ -373,7 +373,7 @@ func (c *Client) GetPasswordToken(realm, clientID, username, password string) (s
 		// Check if token is still valid (with 30s buffer)
 		if time.Now().Unix() < entry.expiresAt-int64(tokenBufferTime.Seconds()) {
 			c.mu.Unlock()
-			c.logger.Debug("Using cached password token", 
+			c.logger.Debug("Using cached password token",
 				zap.String("realm", realm),
 				zap.String("client_id", clientID),
 				zap.String("username", username))

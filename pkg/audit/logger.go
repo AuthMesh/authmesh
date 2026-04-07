@@ -72,8 +72,8 @@ func NewAuditLogger() (*Logger, error) {
 		}
 	}
 
-	// Ensure log directory exists
-	if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
+	// Ensure log directory exists with restricted permissions
+	if err := os.MkdirAll(filepath.Dir(logPath), 0750); err != nil {
 		return nil, fmt.Errorf("failed to create audit log directory: %w", err)
 	}
 

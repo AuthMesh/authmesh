@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AuthMesh/authmesh/pkg/tlsutil"
 	"github.com/MicahParks/keyfunc"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/AuthMesh/authmesh/pkg/tlsutil"
 )
 
 // Constants for error messages and security
@@ -96,9 +96,9 @@ func loadJWKS(jwksURL string) (*keyfunc.JWKS, error) {
 	var lastErr error
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		
+
 		log.Printf("[INFO] Attempting to load JWKS from %s (attempt %d/%d)", jwksURL, attempt+1, maxRetries)
-		
+
 		jwks, err := keyfunc.Get(jwksURL, keyfunc.Options{
 			Ctx:             ctx,
 			RefreshInterval: 5 * time.Minute, // Refresh every 5 minutes instead of 1 hour
@@ -108,7 +108,7 @@ func loadJWKS(jwksURL string) (*keyfunc.JWKS, error) {
 				log.Printf("[ERROR] JWKS refresh failed: %v", err)
 			},
 		})
-		
+
 		cancel()
 
 		if err == nil {
@@ -117,7 +117,7 @@ func loadJWKS(jwksURL string) (*keyfunc.JWKS, error) {
 		}
 
 		lastErr = err
-		
+
 		// If this is the last attempt, don't wait
 		if attempt == maxRetries-1 {
 			break
@@ -129,7 +129,7 @@ func loadJWKS(jwksURL string) (*keyfunc.JWKS, error) {
 		if delay > maxDelay {
 			delay = maxDelay
 		}
-		
+
 		log.Printf("[WARN] JWKS load failed (attempt %d/%d): %v. Retrying in %v...", attempt+1, maxRetries, err, delay)
 		time.Sleep(delay)
 	}
@@ -213,14 +213,28 @@ func SecurityMiddleware() gin.HandlerFunc {
 	}
 }
 
+// sanitizeLogValue removes newlines and control characters from user input to prevent log injection
+func sanitizeLogValue(s string) string {
+	return strings.NewReplacer(
+		"\n", "",
+		"\r", "",
+		"\t", " ",
+	).Replace(s)
+}
+
 // logAuthEvent logs authentication events with structured information
 func logAuthEvent(level, event string, c *gin.Context, details map[string]interface{}) {
+	// Sanitize user-controlled inputs to prevent log injection
+	sanitizedIP := sanitizeLogValue(c.ClientIP())
+	sanitizedUA := sanitizeLogValue(c.GetHeader("User-Agent"))
+	sanitizedPath := sanitizeLogValue(c.Request.URL.Path)
+
 	logEntry := fmt.Sprintf("[%s] %s - IP: %s, UserAgent: %s, Path: %s",
-		level, event, c.ClientIP(), c.GetHeader("User-Agent"), c.Request.URL.Path)
+		level, event, sanitizedIP, sanitizedUA, sanitizedPath)
 
 	if details != nil {
 		for k, v := range details {
-			logEntry += fmt.Sprintf(", %s: %v", k, v)
+			logEntry += fmt.Sprintf(", %s: %v", sanitizeLogValue(k), v)
 		}
 	}
 
@@ -419,7 +433,7 @@ func RequireRole(role string) gin.HandlerFunc {
 		}
 
 		userRoles := extractRoles(mapClaims)
-		
+
 		// Check if user is suspended first
 		for _, r := range userRoles {
 			if r == "suspended" {
@@ -436,7 +450,7 @@ func RequireRole(role string) gin.HandlerFunc {
 				return
 			}
 		}
-		
+
 		hasRole := false
 		for _, r := range userRoles {
 			if r == role {
