@@ -667,7 +667,11 @@ func (c *Client) doRequest(ctx context.Context, method, path, token string, body
 		}
 	}
 
-	url := fmt.Sprintf("%s%s?version=%s", c.baseURL, path, apiVersion)
+	sep := "?"
+	if strings.Contains(path, "?") {
+		sep = "&"
+	}
+	url := fmt.Sprintf("%s%s%sversion=%s", c.baseURL, path, sep, apiVersion)
 
 	var resp *http.Response
 	var respBody []byte

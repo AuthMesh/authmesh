@@ -153,16 +153,18 @@ func (ua *UserAdmin) CreateUser(realm string, user KCUser) (string, error) {
 	return created.ID, nil
 }
 
-// EnsureUser finds or creates a Keycloak user by email and returns the KC user ID.
-func (ua *UserAdmin) EnsureUser(realm string, user KCUser) (string, error) {
+// EnsureUser finds or creates a Keycloak user by email and returns the KC user ID
+// and whether the user was newly created.
+func (ua *UserAdmin) EnsureUser(realm string, user KCUser) (kcID string, created bool, err error) {
 	existing, err := ua.FindUserByEmail(realm, user.Email)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	if existing != nil {
-		return existing.ID, nil
+		return existing.ID, false, nil
 	}
-	return ua.CreateUser(realm, user)
+	id, err := ua.CreateUser(realm, user)
+	return id, err == nil, err
 }
 
 // ---------- Realm Role Management ---------------------------------------------
@@ -334,16 +336,28 @@ func (ua *UserAdmin) SetUserRealmRoles(realm, kcUserID string, desiredRoles []st
 }
 
 // SyncUserRoles is a convenience that ensures the KC user exists and sets their roles.
-// It returns the Keycloak user ID.
-func (ua *UserAdmin) SyncUserRoles(realm string, user KCUser, roles []string) (string, error) {
-	kcID, err := ua.EnsureUser(realm, user)
+// It returns the Keycloak user ID and the temporary password (non-empty only for
+// newly created users).
+func (ua *UserAdmin) SyncUserRoles(realm string, user KCUser, roles []string) (kcID string, tempPassword string, err error) {
+	kcID, isNew, err := ua.EnsureUser(realm, user)
 	if err != nil {
-		return "", fmt.Errorf("ensure user: %w", err)
+		return "", "", fmt.Errorf("ensure user: %w", err)
 	}
 	if err := ua.SetUserRealmRoles(realm, kcID, roles); err != nil {
-		return kcID, fmt.Errorf("set roles: %w", err)
+		return kcID, "", fmt.Errorf("set roles: %w", err)
 	}
-	return kcID, nil
+	// Set a temporary password only for newly created users.
+	if isNew {
+		tempPassword = GenerateTempPassword(user.FirstName, user.LastName)
+		if setErr := ua.SetTemporaryPassword(realm, kcID, tempPassword); setErr != nil {
+			ua.logger.Warn("Failed to set temporary password",
+				zap.String("realm", realm),
+				zap.String("kc_user_id", kcID),
+				zap.Error(setErr))
+			tempPassword = "" // don't return a password that wasn't set
+		}
+	}
+	return kcID, tempPassword, nil
 }
 
 func roleNames(roles []RoleRepresentation) []string {
@@ -352,4 +366,62 @@ func roleNames(roles []RoleRepresentation) []string {
 		names[i] = r.Name
 	}
 	return names
+}
+
+// ---------- Password Management -----------------------------------------------
+
+// SetTemporaryPassword sets a temporary password on a Keycloak user.
+// The user will be required to change it on next login.
+func (ua *UserAdmin) SetTemporaryPassword(realm, kcUserID, password string) error {
+	tok, err := ua.token(realm)
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+	payload := map[string]interface{}{
+		"type":      "password",
+		"value":     password,
+		"temporary": true,
+	}
+
+	_, err = ua.client.doRequest(ctx, "PUT",
+		fmt.Sprintf("/admin/realms/%s/users/%s/reset-password",
+			url.PathEscape(realm), url.PathEscape(kcUserID)),
+		tok, payload)
+	if err != nil {
+		return fmt.Errorf("set temporary password: %w", err)
+	}
+	return nil
+}
+
+// GenerateTempPassword builds a predictable temporary password from the user's
+// name: first 3 chars of first name + first 3 chars of last name + "123",
+// with the 1st and 4th characters uppercased.
+// Examples: "Dinesh","Ramasamy" → "DinRam123"; "Jo","Li" → "JoLi123"
+func GenerateTempPassword(firstName, lastName string) string {
+	first := strings.TrimSpace(firstName)
+	last := strings.TrimSpace(lastName)
+
+	take := func(s string, n int) string {
+		s = strings.ToLower(s)
+		if len(s) > n {
+			return s[:n]
+		}
+		return s
+	}
+
+	part1 := take(first, 3)
+	part2 := take(last, 3)
+	combined := part1 + part2
+
+	// Uppercase 1st and 4th characters (0-indexed: 0 and 3).
+	runes := []rune(combined)
+	for i := range runes {
+		if i == 0 || i == 3 {
+			runes[i] = []rune(strings.ToUpper(string(runes[i])))[0]
+		}
+	}
+
+	return string(runes) + "123"
 }
