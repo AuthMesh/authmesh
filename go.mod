@@ -6,6 +6,7 @@ toolchain go1.25.0
 
 require (
 	github.com/MicahParks/keyfunc v1.9.0
+	github.com/alicebob/miniredis/v2 v2.35.0
 	github.com/gin-contrib/cors v1.7.6
 	github.com/gin-gonic/gin v1.10.1
 	github.com/golang-jwt/jwt/v4 v4.4.2
@@ -25,7 +26,6 @@ require (
 )
 
 require (
-	github.com/alicebob/miniredis/v2 v2.35.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bytedance/sonic v1.13.3 // indirect
 	github.com/bytedance/sonic/loader v0.2.4 // indirect
