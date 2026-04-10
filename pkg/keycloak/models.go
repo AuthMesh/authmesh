@@ -16,14 +16,15 @@ type Realm struct {
 	Enabled     bool              `json:"enabled,omitempty"`
 	Attributes  map[string]string `json:"attributes,omitempty"`
 }
+
 // User represents a Keycloak user (cleaned up for Milestone 3)
 // User represents a Keycloak user (cleaned up for Milestone 3)
 type User struct {
-	   ID       string `json:"id,omitempty"`
-	   Username string `json:"username"`
-	   Email    string `json:"email,omitempty"`
-	RequiredActions  []string            `json:"requiredActions,omitempty"`
-	CreatedTimestamp int64               `json:"createdTimestamp,omitempty"`
+	ID               string   `json:"id,omitempty"`
+	Username         string   `json:"username"`
+	Email            string   `json:"email,omitempty"`
+	RequiredActions  []string `json:"requiredActions,omitempty"`
+	CreatedTimestamp int64    `json:"createdTimestamp,omitempty"`
 }
 
 // ErrorResponse represents a Keycloak API error response
@@ -31,6 +32,17 @@ type ErrorResponse struct {
 	Error            string `json:"error,omitempty"`
 	ErrorDescription string `json:"error_description,omitempty"`
 	ErrorMessage     string `json:"errorMessage,omitempty"`
+}
+
+// APIError is a structured error returned by doRequest that preserves the HTTP
+// status code so callers can branch on it without string matching.
+type APIError struct {
+	StatusCode int
+	Message    string
+}
+
+func (e *APIError) Error() string {
+	return e.Message
 }
 
 // RealmConfig represents configuration for creating a new realm

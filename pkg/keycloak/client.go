@@ -757,11 +757,14 @@ func (c *Client) doRequest(ctx context.Context, method, path, token string, body
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		c.recordError(operation)
 
+		var msg string
 		var errorResp ErrorResponse
 		if jsonErr := json.Unmarshal(respBody, &errorResp); jsonErr == nil && errorResp.ErrorMessage != "" {
-			return nil, fmt.Errorf("API request failed (status %d): %s", resp.StatusCode, errorResp.ErrorMessage)
+			msg = fmt.Sprintf("API request failed (status %d): %s", resp.StatusCode, errorResp.ErrorMessage)
+		} else {
+			msg = fmt.Sprintf("API request failed with status %d: %s", resp.StatusCode, string(respBody))
 		}
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(respBody))
+		return nil, &APIError{StatusCode: resp.StatusCode, Message: msg}
 	}
 
 	c.logger.Debug("Request successful",
