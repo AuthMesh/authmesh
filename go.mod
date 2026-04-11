@@ -2,8 +2,6 @@ module github.com/AuthMesh/authmesh
 
 go 1.23.0
 
-toolchain go1.25.0
-
 require (
 	github.com/MicahParks/keyfunc v1.9.0
 	github.com/alicebob/miniredis/v2 v2.35.0
