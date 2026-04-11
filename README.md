@@ -3,7 +3,7 @@
 **Production-grade, multi-tenant authentication platform for Go applications**
 
 [![Go Version](https://img.shields.io/badge/Go-1.21+-blue.svg)](https://golang.org)
-[![Coverage](https://img.shields.io/badge/coverage-10.6%25-red)](docs/COVERAGE.md)
+[![Coverage](https://img.shields.io/badge/coverage-45.8%25-yellow)](docs/COVERAGE.md)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 [![API Version](https://img.shields.io/badge/API-v1.0.0-orange.svg)](docs/API_REFERENCE.md)
 [![Performance](https://img.shields.io/badge/Performance-5.5M%20tokens%2Fsec-brightgreen.svg)](#performance-benchmarks)
