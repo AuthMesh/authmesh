@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
 
 env:
-  GO_VERSION: '1.21'
+  GO_VERSION: '1.24'
 
 permissions:
   contents: read
@@ -67,7 +67,7 @@ jobs:
         folder-path: 'docs/'
     
     - name: 📝 Check Spelling
-      uses: cspell-tool/cspell-action@v2
+      uses: streetsidesoftware/cspell-action@v6
       with:
         files: |
           **/*.md
