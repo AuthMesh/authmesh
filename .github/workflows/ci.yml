@@ -97,7 +97,7 @@ jobs:
     
     - name: 🧪 Run Integration Tests
       run: |
-        echo "Integration tests skipped (no external services in unit test CI)"
+        go test -v -tags=integration ./tests/integration/...
       continue-on-error: true
 
   e2e:
@@ -301,7 +301,7 @@ jobs:
     
     - name: 🎯 Coverage Threshold Check
       run: |
-        THRESHOLD=15
+        THRESHOLD=40
         if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
           echo "❌ Coverage ($COVERAGE%) is below threshold ($THRESHOLD%)"
           exit 1
