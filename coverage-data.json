@@ -1,0 +1,21 @@
+{
+  "total": 45.8,
+  "timestamp": "2026-04-11T21:17:53Z",
+  "branch": "init",
+  "commit": "b2c6cedfdf5cc75845f54d162ce57f0b537fc362",
+  "packages": {
+    "auth": 100.0,
+    "keycloak": 0.0,
+    "middleware": 100.0,
+    "ratelimit": 0.0,
+    "tlsutil": 79.2
+  },
+  "badges": {
+    "total": "https://img.shields.io/badge/coverage-45.8%25-yellow",
+    "auth": "https://img.shields.io/badge/auth-100.0%25-brightgreen",
+    "keycloak": "https://img.shields.io/badge/keycloak-0.0%25-red",
+    "middleware": "https://img.shields.io/badge/middleware-100.0%25-brightgreen",
+    "ratelimit": "https://img.shields.io/badge/ratelimit-0.0%25-red",
+    "tlsutil": "https://img.shields.io/badge/tlsutil-79.2%25-green"
+  }
+}
