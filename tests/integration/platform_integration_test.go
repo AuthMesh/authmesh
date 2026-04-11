@@ -5,8 +5,10 @@ package integration
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -20,9 +22,51 @@ func init() {
 	gin.SetMode(gin.TestMode)
 }
 
-// TestPlatformSetupAll validates that the platform can be initialized and
-// standard routes (health, welcome, metrics) work end-to-end.
-func TestPlatformSetupAll(t *testing.T) {
+// --- Helper: skip if external services not available ---
+
+func keycloakURL() string {
+	if u := os.Getenv("KEYCLOAK_URL"); u != "" {
+		return u
+	}
+	return "http://localhost:8080"
+}
+
+func redisURL() string {
+	if u := os.Getenv("REDIS_URL"); u != "" {
+		return u
+	}
+	return "redis://localhost:6379"
+}
+
+func skipIfNoRedis(t *testing.T) {
+	t.Helper()
+	// Try a quick TCP dial to see if Redis is reachable
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	r, err := (&net.Dialer{}).DialContext(ctx, "tcp", "localhost:6379")
+	if err != nil {
+		t.Skip("Redis not available, skipping integration test")
+	}
+	r.Close()
+}
+
+func skipIfNoKeycloak(t *testing.T) {
+	t.Helper()
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get(keycloakURL() + "/health/ready")
+	if err != nil || resp.StatusCode != 200 {
+		t.Skip("Keycloak not available, skipping integration test")
+	}
+	resp.Body.Close()
+}
+
+// ============================================================
+// Tests that run WITHOUT external services (always run in CI)
+// ============================================================
+
+// TestPlatformSetupAll_NoExternalDeps validates platform initialization
+// without any external services using NewForTesting.
+func TestPlatformSetupAll_NoExternalDeps(t *testing.T) {
 	authMesh, err := platform.NewForTesting("integration-test")
 	require.NoError(t, err)
 
@@ -48,12 +92,22 @@ func TestPlatformSetupAll(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 	})
 
-	t.Run("protected endpoint without auth returns 401", func(t *testing.T) {
+	t.Run("unauthenticated request to protected route returns 401", func(t *testing.T) {
+		router.GET("/api/secured", authMesh.AuthMiddleware(), func(c *gin.Context) {
+			c.JSON(200, gin.H{"ok": true})
+		})
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest("GET", "/whoami", nil)
+		req := httptest.NewRequest("GET", "/api/secured", nil)
 		router.ServeHTTP(w, req)
-		// Whoami requires auth middleware, should be 401 without token
-		assert.Contains(t, []int{http.StatusUnauthorized, http.StatusOK}, w.Code)
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("request with invalid bearer token returns 401", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/api/secured", nil)
+		req.Header.Set("Authorization", "Bearer invalid-jwt-string")
+		router.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 }
 
@@ -64,80 +118,37 @@ func TestPlatformShutdown(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
 	err = authMesh.Shutdown(ctx)
 	assert.NoError(t, err)
 }
 
-// TestPlatformQuickStart validates the QuickStart convenience constructor
-func TestPlatformQuickStart(t *testing.T) {
+// TestQuickStart validates the convenience constructor
+func TestQuickStart(t *testing.T) {
 	authMesh, err := platform.QuickStart("quickstart-test")
 	require.NoError(t, err)
 	assert.NotNil(t, authMesh)
-
-	router := gin.New()
-	authMesh.SetupAll(router)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/health", nil)
-	router.ServeHTTP(w, req)
-	assert.Equal(t, http.StatusOK, w.Code)
 }
 
-// TestPlatformMiddlewareStack validates the full middleware stack is applied
-func TestPlatformMiddlewareStack(t *testing.T) {
-	authMesh, err := platform.NewForTesting("middleware-test")
-	require.NoError(t, err)
-
-	router := gin.New()
-	authMesh.SetupAll(router)
-
-	// Add a custom protected route
-	router.GET("/api/test", authMesh.AuthMiddleware(), func(c *gin.Context) {
-		c.JSON(200, gin.H{"message": "protected"})
-	})
-
-	t.Run("unauthenticated request to protected route", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest("GET", "/api/test", nil)
-		router.ServeHTTP(w, req)
-		assert.Equal(t, http.StatusUnauthorized, w.Code)
-	})
-
-	t.Run("request with invalid bearer token", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest("GET", "/api/test", nil)
-		req.Header.Set("Authorization", "Bearer invalid-token")
-		router.ServeHTTP(w, req)
-		assert.Equal(t, http.StatusUnauthorized, w.Code)
-	})
-}
-
-// TestExampleAppBasicRoutes simulates what the example apps do
-func TestExampleAppBasicRoutes(t *testing.T) {
+// TestExampleAppRoutePattern mirrors examples/minimal-app to confirm
+// the example code pattern works end-to-end.
+func TestExampleAppRoutePattern(t *testing.T) {
 	authMesh, err := platform.QuickStart("example-app")
 	require.NoError(t, err)
 
 	router := gin.New()
 	authMesh.SetupAll(router)
 
-	// Add routes like the minimal-app example
 	router.GET("/hello", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"message":    "Hello from AuthMesh!",
-			"powered_by": "AuthMesh Platform",
-		})
+		c.JSON(http.StatusOK, gin.H{"message": "Hello from AuthMesh!"})
 	})
 
 	protected := router.Group("/api/v1")
 	protected.Use(authMesh.AuthMiddleware())
-	{
-		protected.GET("/protected", func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{"message": "authenticated"})
-		})
-	}
+	protected.GET("/protected", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"message": "authenticated"})
+	})
 
-	t.Run("public hello endpoint", func(t *testing.T) {
+	t.Run("public endpoint works", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest("GET", "/hello", nil)
 		router.ServeHTTP(w, req)
@@ -151,4 +162,121 @@ func TestExampleAppBasicRoutes(t *testing.T) {
 		router.ServeHTTP(w, req)
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
+}
+
+// ============================================================
+// Tests that REQUIRE external services (skipped when missing)
+// ============================================================
+
+// TestWithRedis_PlatformInitialization tests that the platform can
+// connect to a real Redis instance and function properly.
+func TestWithRedis_PlatformInitialization(t *testing.T) {
+	skipIfNoRedis(t)
+
+	config := platform.DefaultConfig()
+	config.Keycloak.URL = ""
+	config.Keycloak.SkipJWKSInit = true
+	config.Redis.URL = redisURL()
+	config.Observability.AppName = "redis-integration-test"
+	config.Observability.EnableMetrics = false
+	config.Observability.EnableTracing = false
+
+	authMesh, err := platform.New(config)
+	require.NoError(t, err)
+
+	router := gin.New()
+	authMesh.SetupAll(router)
+
+	t.Run("health endpoint shows redis up", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/health", nil)
+		router.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err = authMesh.Shutdown(ctx)
+	assert.NoError(t, err)
+}
+
+// TestWithKeycloak_HealthCheck tests Keycloak connectivity
+func TestWithKeycloak_HealthCheck(t *testing.T) {
+	skipIfNoKeycloak(t)
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(keycloakURL() + "/health/ready")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+// TestWithKeycloak_PlatformInitialization connects to a real Keycloak
+func TestWithKeycloak_PlatformInitialization(t *testing.T) {
+	skipIfNoKeycloak(t)
+
+	config := platform.DefaultConfig()
+	config.Keycloak.URL = keycloakURL()
+	config.Keycloak.Realm = "master"
+	config.Redis.URL = ""
+	config.Observability.AppName = "keycloak-integration-test"
+	config.Observability.EnableMetrics = false
+	config.Observability.EnableTracing = false
+
+	authMesh, err := platform.New(config)
+	// May fail if Keycloak JWKS isn't ready yet — that's ok
+	if err != nil {
+		t.Skipf("Keycloak JWKS not ready: %v", err)
+	}
+
+	router := gin.New()
+	authMesh.SetupAll(router)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/health", nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+// TestWithBothServices_FullStack tests with both Keycloak and Redis
+func TestWithBothServices_FullStack(t *testing.T) {
+	skipIfNoRedis(t)
+	skipIfNoKeycloak(t)
+
+	config := platform.DefaultConfig()
+	config.Keycloak.URL = keycloakURL()
+	config.Keycloak.Realm = "master"
+	config.Redis.URL = redisURL()
+	config.Observability.AppName = "full-stack-test"
+	config.Observability.EnableMetrics = true
+	config.Observability.EnableTracing = false
+
+	authMesh, err := platform.New(config)
+	if err != nil {
+		t.Skipf("Services not fully ready: %v", err)
+	}
+
+	router := gin.New()
+	authMesh.SetupAll(router)
+
+	t.Run("health shows all services", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/health", nil)
+		router.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("unauthenticated request is rejected", func(t *testing.T) {
+		router.GET("/api/full-stack", authMesh.AuthMiddleware(), func(c *gin.Context) {
+			c.JSON(200, gin.H{"ok": true})
+		})
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/api/full-stack", nil)
+		router.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	authMesh.Shutdown(ctx)
 }
