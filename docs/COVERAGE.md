@@ -1,26 +1,26 @@
 # 📊 AuthMesh Code Coverage Report
 
-**Last Updated:** July 14, 2025  
+**Last Updated:** $(date '+%Y-%m-%d %H:%M:%S UTC')  
 **Branch:** init  
-**Total Coverage:** 10.6%
+**Commit:** d9aad8395a20df0947b733fadc037820ca297233
 
 ## 🎯 Coverage Summary
 
-![Coverage Badge](https://img.shields.io/badge/coverage-10.6%25-red)
+![Coverage Badge](https://img.shields.io/badge/coverage-$TOTAL_COVERAGE%25-$TOTAL_COLOR)
 
+**Total Coverage:** $TOTAL_COVERAGE%  
 **Coverage Threshold:** 15% (CI requirement)  
-**Target Goal:** 70% (production ready)  
-**Current Status:** 🔴 Below minimum threshold - needs immediate attention
+**Target Goal:** 70% (production ready)
 
 ## 📈 Package Coverage Breakdown
 
 | Package | Coverage | Status | Quality Focus |
 |---------|----------|--------|---------------|
-| **pkg/auth** | ![Auth](https://img.shields.io/badge/auth-3.6%25-red) | 🔴 Critical | RBAC & JWT Authentication |
-| **pkg/keycloak** | ![Keycloak](https://img.shields.io/badge/keycloak-42.9%25-yellow) | 🟢 Good | Identity Provider Integration |
-| **pkg/middleware** | ![Middleware](https://img.shields.io/badge/middleware-3.3%25-red) | 🔴 Critical | Security & CORS |
-| **pkg/ratelimit** | ![RateLimit](https://img.shields.io/badge/ratelimit-5.4%25-red) | 🔴 Critical | Token Bucket Algorithm |
-| **pkg/tlsutil** | ![TLS](https://img.shields.io/badge/tlsutil-53.8%25-green) | 🟢 Good | TLS Security Configuration |
+| **pkg/auth** | ![Auth](https://img.shields.io/badge/auth-$AUTH_COVERAGE%25-$AUTH_COLOR) | $([ $(echo "$AUTH_COVERAGE >= 40" | bc -l) -eq 1 ] && echo "🟢 Good" || echo "🔴 Needs Work") | RBAC & JWT Authentication |
+| **pkg/keycloak** | ![Keycloak](https://img.shields.io/badge/keycloak-$KEYCLOAK_COVERAGE%25-$KEYCLOAK_COLOR) | $([ $(echo "$KEYCLOAK_COVERAGE >= 40" | bc -l) -eq 1 ] && echo "🟢 Good" || echo "🔴 Needs Work") | Identity Provider Integration |
+| **pkg/middleware** | ![Middleware](https://img.shields.io/badge/middleware-$MIDDLEWARE_COVERAGE%25-$MIDDLEWARE_COLOR) | $([ $(echo "$MIDDLEWARE_COVERAGE >= 40" | bc -l) -eq 1 ] && echo "🟢 Good" || echo "🔴 Needs Work") | Security & CORS |
+| **pkg/ratelimit** | ![RateLimit](https://img.shields.io/badge/ratelimit-$RATELIMIT_COVERAGE%25-$RATELIMIT_COLOR) | $([ $(echo "$RATELIMIT_COVERAGE >= 40" | bc -l) -eq 1 ] && echo "🟢 Good" || echo "🔴 Needs Work") | Token Bucket Algorithm |
+| **pkg/tlsutil** | ![TLS](https://img.shields.io/badge/tlsutil-$TLSUTIL_COVERAGE%25-$TLSUTIL_COLOR) | $([ $(echo "$TLSUTIL_COVERAGE >= 40" | bc -l) -eq 1 ] && echo "🟢 Good" || echo "🔴 Needs Work") | TLS Security Configuration |
 
 ## 🎯 Coverage Goals & Roadmap
 
