@@ -5,6 +5,10 @@ on:
     types: [opened, synchronize, reopened]
     branches: [ main, init ]
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   coverage-check:
     name: Coverage Check and PR Update

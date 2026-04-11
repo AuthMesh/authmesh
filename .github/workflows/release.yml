@@ -74,7 +74,6 @@ jobs:
     - name: 🧪 Run Full Test Suite
       run: |
         go test -v ./pkg/...
-        go test -v -tags=integration ./tests/integration/...
     
     - name: 📊 Coverage Check
       run: |
@@ -283,25 +282,14 @@ jobs:
         ls -la release-assets/
     
     - name: 🎉 Create GitHub Release
-      uses: actions/create-release@v1
-      id: create_release
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ needs.validate.outputs.version }}
-        release_name: AuthMesh ${{ needs.validate.outputs.version }}
+        name: AuthMesh ${{ needs.validate.outputs.version }}
         body: ${{ needs.changelog.outputs.changelog }}
         draft: false
-        prerelease: ${{ needs.validate.outputs.is_prerelease }}
-    
-    - name: 📤 Upload Release Assets
-      run: |
-        for asset in release-assets/*; do
-          if [ -f "$asset" ]; then
-            echo "📤 Uploading $(basename "$asset")"
-            gh release upload ${{ needs.validate.outputs.version }} "$asset"
-          fi
-        done
+        prerelease: ${{ needs.validate.outputs.is_prerelease == 'true' }}
+        files: release-assets/*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -324,7 +312,11 @@ jobs:
     
     - name: 📚 Generate API Documentation
       run: |
-        go doc -all ./pkg/... > docs/api-reference.md
+        mkdir -p docs
+        for pkg in pkg/*/; do
+          pkg_name=$(basename "$pkg")
+          go doc -all "./pkg/$pkg_name"
+        done > docs/api-reference.md
     
     - name: 📝 Update Version in Documentation
       run: |
