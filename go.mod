@@ -1,6 +1,6 @@
 module github.com/AuthMesh/authmesh
 
-go 1.23.0
+go 1.24
 
 require (
 	github.com/MicahParks/keyfunc v1.9.0

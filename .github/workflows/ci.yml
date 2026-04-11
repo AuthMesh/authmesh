@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ['1.23', '1.24']
+        go-version: ['1.24']
     
     services:
       redis:
@@ -35,19 +35,21 @@ jobs:
           --health-retries 5
       
       keycloak:
-        image: quay.io/keycloak/keycloak:22.0
+        image: quay.io/keycloak/keycloak:24.0
         ports:
           - 8080:8080
         env:
           KEYCLOAK_ADMIN: admin
           KEYCLOAK_ADMIN_PASSWORD: admin
-          KC_HTTP_ENABLED: true
-          KC_HOSTNAME_STRICT: false
+          KC_HTTP_ENABLED: "true"
+          KC_HOSTNAME_STRICT: "false"
+          KC_HEALTH_ENABLED: "true"
         options: >-
-          --health-cmd "curl -f http://localhost:8080/health/ready || exit 1"
+          --health-cmd "curl -sf http://localhost:8080/health/ready || exit 1"
           --health-interval 30s
           --health-timeout 10s
-          --health-retries 10
+          --health-retries 15
+          --health-start-period 60s
     
     steps:
     - name: 📥 Checkout Code
@@ -263,7 +265,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ['1.23', '1.24']
+        go-version: ['1.24']
         os: [ubuntu-latest, macos-latest]
     
     steps:
