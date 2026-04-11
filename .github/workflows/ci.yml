@@ -97,8 +97,19 @@ jobs:
     
     - name: 🧪 Run Integration Tests
       run: |
+        # Wait for Keycloak to be fully ready (it's slow to start)
+        echo "Waiting for Keycloak..."
+        for i in $(seq 1 30); do
+          if curl -sf http://localhost:8080/health/ready > /dev/null 2>&1; then
+            echo "Keycloak ready after ${i}s"
+            break
+          fi
+          sleep 2
+        done
         go test -v -tags=integration ./tests/integration/...
-      continue-on-error: true
+      env:
+        REDIS_URL: redis://localhost:6379
+        KEYCLOAK_URL: http://localhost:8080
 
   e2e:
     name: 🌐 End-to-End Tests
