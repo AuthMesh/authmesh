@@ -80,7 +80,8 @@
     "yourdomain",
     "goroutines",
     "virtualservice",
-    "orbis"
+    "orbis",
+    "goarch"
   ],
   "flagWords": [],
   "ignorePaths": [
