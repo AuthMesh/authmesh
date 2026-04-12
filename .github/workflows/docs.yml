@@ -65,7 +65,7 @@ jobs:
         files: |
           **/*.md
           **/*.txt
-        config_path: .github/cspell.json
+        config: .github/cspell.json
     
     - name: 📋 Validate Examples
       run: |
