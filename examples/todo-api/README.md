@@ -231,8 +231,8 @@ todo-api/
 ## 📚 Next Steps
 
 - Try the [basic-app](../basic-app) for advanced features and production patterns
-- See the [AuthMesh documentation](../../../docs/) for production deployment patterns
-- Check [AuthMesh docs](../../../docs) for advanced features
+- See the [AuthMesh documentation](../../docs/) for production deployment patterns
+- Check [AuthMesh docs](../../docs/) for advanced features
 
 
 ## 🆚 Comparison with Other Examples

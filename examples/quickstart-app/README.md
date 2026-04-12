@@ -190,7 +190,7 @@ When you call `authMesh.SetupAll(router)`, AuthMesh:
 1. **Understand the Magic**: Look at [minimal-app](../minimal-app) for the simplest possible setup
 2. **Customize Configuration**: Try [todo-api](../todo-api) for custom configuration
 3. **Production Patterns**: Study [basic-app](../basic-app) for advanced features and production patterns
-4. **Advanced Features**: Check the [AuthMesh documentation](../../../docs/) for comprehensive guides
+4. **Advanced Features**: Check the [AuthMesh documentation](../../docs/) for comprehensive guides
 
 ## 🤔 When to Use QuickStart vs Custom Config
 

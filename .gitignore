@@ -54,3 +54,4 @@ coverage-func.txt
 *.tmp
 *.temp
 examples/*/minimal-app
+examples/basic-app/basic-app

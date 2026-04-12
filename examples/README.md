@@ -101,7 +101,7 @@ After working through these examples, you'll understand:
 ## 📖 Additional Resources
 
 - 📚 [AuthMesh Documentation](../docs/)
-- 🔧 [Configuration Reference](../docs/CONFIGURATION.md)
-- 🛡️ [Security Guide](../docs/CORS_SECURITY.md)
-- 📊 [Monitoring Setup](../docs/monitoring/)
-- 🚀 [Production Checklist](../docs/DEPLOYMENT_CHECKLIST.md)
+- 🔧 [Configuration Reference](../docs/QUICKSTART.md)
+- 🛡️ [Security Guide](../docs/SECURITY.md)
+- 📊 [Performance Guide](../docs/PERFORMANCE.md)
+- 🚀 [API Reference](../docs/API_REFERENCE.md)

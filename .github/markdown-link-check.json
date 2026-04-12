@@ -56,6 +56,15 @@
     },
     {
       "pattern": "your-keycloak"
+    },
+    {
+      "pattern": "^http://prometheus:"
+    },
+    {
+      "pattern": "^http://grafana:"
+    },
+    {
+      "pattern": "^http://jaeger:"
     }
   ],
   "httpStatusCodes": [

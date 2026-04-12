@@ -158,7 +158,7 @@ Any known CVEs related to this issue.
 
 ## 🚨 Security Policy
 
-By submitting this report, you acknowledge that you have read and agree to our [Security Policy](../SECURITY.md).
+By submitting this report, you acknowledge that you have read and agree to our [Security Policy](../../SECURITY.md).
 
 **Responsible Disclosure:** We ask that you give us a reasonable amount of time to address the issue before making any public disclosure.
 

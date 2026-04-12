@@ -89,4 +89,4 @@ How does this bug affect your application or users?
 
 ---
 
-**Note:** For security-related issues, please use our [Security Report Template](.github/ISSUE_TEMPLATE/security_report.md) instead.
+**Note:** For security-related issues, please use our [Security Report Template](security_report.md) instead.

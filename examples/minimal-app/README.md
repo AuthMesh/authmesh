@@ -98,7 +98,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 - Try the [quickstart-app](../quickstart-app) for more routes and RBAC
 - Try the [todo-api](../todo-api) for a real CRUD API with custom config
 - Try the [basic-app](../basic-app) for advanced features and observability
-- Check out the [AuthMesh documentation](../../../docs/) for advanced features
+- Check out the [AuthMesh documentation](../../docs/) for advanced features
 
 authMesh, _ := platform.QuickStart("minimal-app")
 router := gin.Default()

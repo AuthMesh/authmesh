@@ -197,8 +197,8 @@ authMesh.NewMethod("param", Options{
 
 **References:**
 - [Documentation](https://docs.example.com)
-- [RFC/Design Doc](https://github.com/link-to-design)
-- [Issue Discussion](https://github.com/link-to-issue)
+- RFC/Design Doc
+- Issue Discussion
 
 **Future Work:**
 Items that are planned for future PRs:

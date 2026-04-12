@@ -111,7 +111,7 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/t/tenant1/dashboard
 ### Grafana Dashboards
 - Open http://localhost:3000
 - Login with admin/admin
-- Add Prometheus as data source: http://prometheus:9090
+- Add Prometheus as data source: http://localhost:9090
 - Create dashboards for application metrics
 
 ### Jaeger Tracing
@@ -165,4 +165,4 @@ This removes all containers and volumes.
 - Try the [minimal-app](../minimal-app) for the simplest setup
 - Try the [quickstart-app](../quickstart-app) for a full-featured demo
 - Try the [todo-api](../todo-api) for a real CRUD API with custom config
-- Read the [full documentation](../../../docs/)
+- Read the [full documentation](../../docs/)
