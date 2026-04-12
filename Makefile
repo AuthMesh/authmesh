@@ -340,7 +340,7 @@ ci-spelling:
 	@if ! command -v npx >/dev/null 2>&1; then \
 		echo "SKIP: npx not found (install Node.js)"; \
 	else \
-		npx --yes cspell lint --config .github/cspell.json "**/*.md" --no-progress; \
+		npx --yes cspell@6.31.0 lint --config .github/cspell.json "**/*.md" "**/*.txt" --no-progress; \
 		echo "PASS: ci-spelling"; \
 	fi
 

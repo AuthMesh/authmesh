@@ -81,7 +81,11 @@
     "goroutines",
     "virtualservice",
     "orbis",
-    "goarch"
+    "goarch",
+    "struct",
+    "ratelimit",
+    "pprof",
+    "quickstart"
   ],
   "flagWords": [],
   "ignorePaths": [
