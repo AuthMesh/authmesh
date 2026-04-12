@@ -57,19 +57,17 @@ func AuthEventLogger(logger *zap.Logger, level, event string, c *gin.Context, de
 		zap.String("path", c.Request.URL.Path),
 		zap.String("method", c.Request.Method),
 	}
-	
+
 	// Add request ID if available
 	if requestID, exists := c.Get("request_id"); exists {
 		fields = append(fields, zap.Any("request_id", requestID))
 	}
-	
+
 	// Add additional details
-	if details != nil {
-		for k, v := range details {
-			fields = append(fields, zap.Any(k, v))
-		}
+	for k, v := range details {
+		fields = append(fields, zap.Any(k, v))
 	}
-	
+
 	switch level {
 	case "INFO":
 		logger.Info("Authentication event", fields...)

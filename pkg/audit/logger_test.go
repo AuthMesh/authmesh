@@ -2,7 +2,6 @@ package audit
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -173,7 +172,7 @@ func TestAuditEvent_MarshalJSON(t *testing.T) {
 
 func TestLogger_LogEvent(t *testing.T) {
 	// Create temporary log file
-	tmpFile, err := ioutil.TempFile("", "audit-test-*.log")
+	tmpFile, err := os.CreateTemp("", "audit-test-*.log")
 	require.NoError(t, err)
 	defer os.Remove(tmpFile.Name())
 	tmpFile.Close()
@@ -252,7 +251,7 @@ func TestLogger_LogEvent(t *testing.T) {
 }
 
 func TestLogger_LogRealmCreation(t *testing.T) {
-	tmpFile, err := ioutil.TempFile("", "audit-realm-test-*.log")
+	tmpFile, err := os.CreateTemp("", "audit-realm-test-*.log")
 	require.NoError(t, err)
 	defer os.Remove(tmpFile.Name())
 	tmpFile.Close()
@@ -289,7 +288,7 @@ func TestLogger_LogRealmCreation(t *testing.T) {
 }
 
 func TestLogger_LogRealmUpdate(t *testing.T) {
-	tmpFile, err := ioutil.TempFile("", "audit-realm-update-test-*.log")
+	tmpFile, err := os.CreateTemp("", "audit-realm-update-test-*.log")
 	require.NoError(t, err)
 	defer os.Remove(tmpFile.Name())
 	tmpFile.Close()
@@ -324,7 +323,7 @@ func TestLogger_LogRealmUpdate(t *testing.T) {
 }
 
 func TestLogger_LogRateLimitUpdate(t *testing.T) {
-	tmpFile, err := ioutil.TempFile("", "audit-ratelimit-test-*.log")
+	tmpFile, err := os.CreateTemp("", "audit-ratelimit-test-*.log")
 	require.NoError(t, err)
 	defer os.Remove(tmpFile.Name())
 	tmpFile.Close()
@@ -356,7 +355,7 @@ func TestLogger_LogRateLimitUpdate(t *testing.T) {
 }
 
 func TestLogger_LogError(t *testing.T) {
-	tmpFile, err := ioutil.TempFile("", "audit-error-test-*.log")
+	tmpFile, err := os.CreateTemp("", "audit-error-test-*.log")
 	require.NoError(t, err)
 	defer os.Remove(tmpFile.Name())
 	tmpFile.Close()
@@ -477,7 +476,7 @@ func TestParseSize(t *testing.T) {
 }
 
 func TestLogger_Close(t *testing.T) {
-	tmpFile, err := ioutil.TempFile("", "audit-close-test-*.log")
+	tmpFile, err := os.CreateTemp("", "audit-close-test-*.log")
 	require.NoError(t, err)
 	defer os.Remove(tmpFile.Name())
 	tmpFile.Close()
@@ -502,7 +501,7 @@ func TestLogger_Close(t *testing.T) {
 
 // Benchmark tests
 func BenchmarkNewAuditLogger(b *testing.B) {
-	tmpFile, err := ioutil.TempFile("", "audit-bench-*.log")
+	tmpFile, err := os.CreateTemp("", "audit-bench-*.log")
 	require.NoError(b, err)
 	defer os.Remove(tmpFile.Name())
 	tmpFile.Close()
@@ -519,7 +518,7 @@ func BenchmarkNewAuditLogger(b *testing.B) {
 }
 
 func BenchmarkLogger_LogEvent(b *testing.B) {
-	tmpFile, err := ioutil.TempFile("", "audit-bench-log-*.log")
+	tmpFile, err := os.CreateTemp("", "audit-bench-log-*.log")
 	require.NoError(b, err)
 	defer os.Remove(tmpFile.Name())
 	tmpFile.Close()

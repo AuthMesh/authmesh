@@ -296,7 +296,7 @@ func (um *UserManager) GetMasterAdminToken() (string, error) {
 
 	adminUsername := os.Getenv("KEYCLOAK_ADMIN")
 	adminPassword := os.Getenv("KEYCLOAK_ADMIN_PASSWORD")
-	
+
 	if adminUsername == "" || adminPassword == "" {
 		err := fmt.Errorf("KEYCLOAK_ADMIN or KEYCLOAK_ADMIN_PASSWORD not set")
 		span.RecordError(err)
@@ -443,21 +443,22 @@ func (um *UserManager) GetTenantRateLimit(tenantID string) (float64, error) {
 	return 1000.0, nil // Default fallback
 }
 
-// Helper functions to get default values from environment or use fallbacks
-func getDefaultRateLimit() int {
+// getDefaultRateLimit returns the default rate limit from environment or fallback
+func getDefaultRateLimit() int { //nolint:unused // reserved for future use
 	if val := os.Getenv("RATE_LIMIT_DEFAULT"); val != "" {
 		if limit, err := strconv.Atoi(val); err == nil {
 			return limit
 		}
 	}
-	return 1000 // Default fallback
+	return 1000
 }
 
-func getDefaultMaxRateLimit() int {
+// getDefaultMaxRateLimit returns the default max rate limit from environment or fallback
+func getDefaultMaxRateLimit() int { //nolint:unused // reserved for future use
 	if val := os.Getenv("RATE_LIMIT_MAX_DEFAULT"); val != "" {
 		if limit, err := strconv.Atoi(val); err == nil {
 			return limit
 		}
 	}
-	return 2000 // Default fallback
+	return 2000
 }

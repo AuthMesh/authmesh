@@ -232,10 +232,8 @@ func logAuthEvent(level, event string, c *gin.Context, details map[string]interf
 	logEntry := fmt.Sprintf("[%s] %s - IP: %s, UserAgent: %s, Path: %s",
 		level, event, sanitizedIP, sanitizedUA, sanitizedPath)
 
-	if details != nil {
-		for k, v := range details {
-			logEntry += fmt.Sprintf(", %s: %v", sanitizeLogValue(k), v)
-		}
+	for k, v := range details {
+		logEntry += fmt.Sprintf(", %s: %v", sanitizeLogValue(k), v)
 	}
 
 	log.Println(logEntry)
@@ -719,7 +717,7 @@ type RefreshTokenResponse struct {
 // ValidateRefreshToken validates a refresh token against Keycloak
 func ValidateRefreshToken(realm, refreshToken, clientID, clientSecret string) (*RefreshTokenResponse, error) {
 	if Registry.KeycloakURL == "" {
-		return nil, fmt.Errorf("Keycloak URL not configured")
+		return nil, fmt.Errorf("keycloak URL not configured")
 	}
 
 	tokenURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token", Registry.KeycloakURL, realm)
@@ -743,7 +741,7 @@ func ValidateRefreshToken(realm, refreshToken, clientID, clientSecret string) (*
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("token refresh failed with status: %d", resp.StatusCode)

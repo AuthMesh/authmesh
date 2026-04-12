@@ -26,8 +26,6 @@ import (
 const (
 	// API version for stability
 	apiVersion = "26.0.0"
-	// Default timeouts
-	defaultTimeout = 10 * time.Second
 	// Retry configuration
 	maxRetries      = 3
 	baseRetryDelay  = 100 * time.Millisecond
@@ -170,7 +168,7 @@ func (c *Client) GetAdminToken(clientID, clientSecret string) (string, error) {
 		}
 
 		respBody, lastErr = io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		if lastErr != nil {
 			c.logger.Warn("Failed to read token response",
@@ -302,7 +300,7 @@ func (c *Client) GetClientCredentialsToken(realm, clientID, clientSecret string)
 		span.RecordError(err)
 		return "", fmt.Errorf("failed to get client credentials token: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -415,7 +413,7 @@ func (c *Client) GetPasswordToken(realm, clientID, username, password string) (s
 		span.RecordError(err)
 		return "", fmt.Errorf("password token request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -722,7 +720,7 @@ func (c *Client) doRequest(ctx context.Context, method, path, token string, body
 		}
 
 		respBody, err = io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		if err != nil {
 			c.logger.Warn("Failed to read response",

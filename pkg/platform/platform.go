@@ -685,7 +685,7 @@ func (p *Platform) Shutdown(ctx context.Context) error {
 	}
 
 	if p.logger != nil {
-		p.logger.Sync()
+		_ = p.logger.Sync()
 	}
 
 	return nil
@@ -901,7 +901,7 @@ func (p *Platform) checkKeycloakHealth() string {
 			return "down"
 		}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 500 {
 		return "up"
@@ -922,7 +922,7 @@ func (p *Platform) checkNATSHealth() string {
 	if err != nil {
 		return "down"
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 200 {
 		return "up"
@@ -942,7 +942,7 @@ func (p *Platform) checkOTelHealth() string {
 	if err != nil {
 		return "down"
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 500 {
 		return "up"
@@ -963,7 +963,7 @@ func (p *Platform) checkPrometheusHealth() string {
 	if err != nil {
 		return "down"
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 200 {
 		return "up"

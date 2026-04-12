@@ -177,7 +177,7 @@ func TestTLSConfig_Security(t *testing.T) {
 			"Must use TLS 1.2 or higher")
 
 		// Should not allow SSLv3, TLS 1.0, or TLS 1.1
-		assert.NotEqual(t, uint16(tls.VersionSSL30), tlsConfig.MinVersion,
+		assert.NotEqual(t, uint16(tls.VersionSSL30), tlsConfig.MinVersion, //nolint:staticcheck // intentionally testing deprecated version
 			"Must not allow SSLv3")
 		assert.NotEqual(t, uint16(tls.VersionTLS10), tlsConfig.MinVersion,
 			"Must not allow TLS 1.0")

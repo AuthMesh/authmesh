@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"testing"
 )
 
@@ -19,7 +20,7 @@ func TestRecordAuthRequest_NilTelemetry(t *testing.T) {
 	GlobalTelemetry = nil
 	// Should not panic when telemetry is nil
 	var t2 *Telemetry
-	t2.RecordAuthRequest(nil, "tenant", "user", "role", "success")
+	t2.RecordAuthRequest(context.TODO(), "tenant", "user", "role", "success")
 }
 
 func TestExportTelemetryToJSON_Empty(t *testing.T) {

@@ -36,11 +36,11 @@ func WaitForServices(baseURL string, timeout time.Duration) error {
 			// Check application health
 			resp, err := http.Get(baseURL + "/health")
 			if err == nil && resp.StatusCode == http.StatusOK {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				return nil
 			}
 			if resp != nil {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 			}
 		}
 	}

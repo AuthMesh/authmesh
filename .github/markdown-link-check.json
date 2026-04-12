@@ -23,6 +23,36 @@
     },
     {
       "pattern": "^https://img.shields.io"
+    },
+    {
+      "pattern": "^https://authmesh.github.io"
+    },
+    {
+      "pattern": "^https://example.com"
+    },
+    {
+      "pattern": "^https://auth.example.com"
+    },
+    {
+      "pattern": "^https://your-keycloak.com"
+    },
+    {
+      "pattern": "^https://yourdomain.com"
+    },
+    {
+      "pattern": "^https://auth.company.com"
+    },
+    {
+      "pattern": "^https://api.example.com"
+    },
+    {
+      "pattern": "^https://docs.example.com"
+    },
+    {
+      "pattern": "example\\.com"
+    },
+    {
+      "pattern": "your-keycloak"
     }
   ],
   "httpStatusCodes": [

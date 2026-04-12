@@ -168,7 +168,7 @@ func exportTelemetryToJSON() {
 		log.Printf("Error opening telemetry file: %v", err)
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")

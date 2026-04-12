@@ -46,7 +46,7 @@ func (cache *TenantRateLimitCache) GetTenantRateLimitCached(tenantID string) (fl
 func (cache *TenantRateLimitCache) GetTenantRateLimit(tenantID string) (map[string]interface{}, error) {
 	ctx := context.Background()
 	key := fmt.Sprintf("realm_rate_limits:%s", tenantID)
-	
+
 	data, err := cache.redisClient.Get(ctx, key).Result()
 	if err != nil {
 		if err == redis.Nil {
@@ -54,12 +54,12 @@ func (cache *TenantRateLimitCache) GetTenantRateLimit(tenantID string) (map[stri
 		}
 		return nil, err
 	}
-	
+
 	var rateLimits map[string]interface{}
 	if err := json.Unmarshal([]byte(data), &rateLimits); err != nil {
 		return nil, err
 	}
-	
+
 	return rateLimits, nil
 }
 
@@ -67,12 +67,12 @@ func (cache *TenantRateLimitCache) GetTenantRateLimit(tenantID string) (map[stri
 func (cache *TenantRateLimitCache) SetTenantRateLimit(tenantID string, rateLimits map[string]interface{}) error {
 	ctx := context.Background()
 	key := fmt.Sprintf("realm_rate_limits:%s", tenantID)
-	
+
 	data, err := json.Marshal(rateLimits)
 	if err != nil {
 		return err
 	}
-	
+
 	return cache.redisClient.Set(ctx, key, data, 24*time.Hour).Err()
 }
 
@@ -91,9 +91,9 @@ func NewSuperAdminHandler(redisClient *redis.Client, logger *zap.Logger) (*Super
 	if logger == nil {
 		return nil, fmt.Errorf("logger is required")
 	}
-	
+
 	cache := NewTenantRateLimitCache(redisClient)
-	
+
 	return &SuperAdminHandler{
 		logger:      logger,
 		redisClient: redisClient,
@@ -136,7 +136,7 @@ func (h *SuperAdminHandler) SetRealmRateLimits(c *gin.Context) {
 		"per_user_requests_per_second": req.PerUserRequestsPerSecond,
 		"per_user_burst":               req.PerUserBurst,
 	}
-	
+
 	if err := h.cache.SetTenantRateLimit(realmID, rateLimits); err != nil {
 		h.logger.Error("Failed to store rate limit settings",
 			zap.String("realm_id", realmID),
@@ -146,7 +146,9 @@ func (h *SuperAdminHandler) SetRealmRateLimits(c *gin.Context) {
 	}
 
 	// Update the simple cache for backwards compatibility
-	h.cache.UpdateTenantRateLimitCache(realmID, req.MaxRequestsPerSecond)
+	if err := h.cache.UpdateTenantRateLimitCache(realmID, req.MaxRequestsPerSecond); err != nil {
+		h.logger.Warn("Failed to update tenant rate limit cache", zap.Error(err))
+	}
 
 	// Also update Redis so middleware can pick up the new rate limit
 	redisKey := fmt.Sprintf("ratelimit_tenant:golang-mt:%s", realmID)
