@@ -60,12 +60,7 @@ jobs:
         folder-path: 'docs/'
     
     - name: 📝 Check Spelling
-      uses: streetsidesoftware/cspell-action@v6
-      with:
-        files: |
-          **/*.md
-          **/*.txt
-        config: .github/cspell.json
+      run: npx --yes cspell@8.19.4 lint --config .github/cspell.json "**/*.md" "**/*.txt" --no-progress
     
     - name: 📋 Validate Examples
       run: |
