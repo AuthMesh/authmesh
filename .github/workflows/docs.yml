@@ -2,7 +2,7 @@ name: 📚 Documentation Generation
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, init ]
     paths:
       - 'docs/**'
       - 'pkg/**'
