@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"net/http"
 	"os"
 
 	"github.com/AuthMesh/authmesh/pkg/platform"
@@ -42,12 +41,6 @@ func main() {
 	router.Use(gin.Recovery())
 	authMesh.SetupMiddleware(router)
 	authMesh.SetupRoutes(router)
-
-	router.GET("/", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "E2E Test App",
-		})
-	})
 
 	log.Println("E2E test app starting on :8080")
 	router.Run(":8080")
