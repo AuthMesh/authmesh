@@ -125,54 +125,50 @@ jobs:
       with:
         go-version: ${{ env.GO_VERSION }}
     
-    - name: 🐳 Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-    
-    - name: 🚀 Start Test Environment
+    - name: 🐳 Start Redis
       run: |
-        cd examples/basic-app
-        docker compose -f docker-compose.yml up -d --build
-        
-        # Wait for the app service to be healthy
-        echo "Waiting for app to be ready..."
-        for i in $(seq 1 60); do
-          if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
-            echo "App ready after $((i*5))s"
+        docker run -d --name redis -p 6379:6379 redis:7-alpine
+        # Wait for Redis
+        for i in $(seq 1 10); do
+          if docker exec redis redis-cli ping 2>/dev/null | grep -q PONG; then
+            echo "Redis ready"
             break
           fi
-          if [ $i -eq 60 ]; then
-            echo "App failed to start, checking logs..."
-            docker compose logs app 2>&1 | tail -30
+          sleep 1
+        done
+
+    - name: 🚀 Start Test App
+      run: |
+        cd tests/e2e/testapp
+        go build -o e2e-app .
+        REDIS_URL=redis://localhost:6379 ./e2e-app &
+        
+        # Wait for app to be ready
+        echo "Waiting for app to be ready..."
+        for i in $(seq 1 30); do
+          if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
+            echo "App ready after ${i}s"
+            break
+          fi
+          if [ $i -eq 30 ]; then
+            echo "App failed to start"
             exit 1
           fi
-          sleep 5
+          sleep 1
         done
-    
+
     - name: 🧪 Run E2E Tests
       run: |
-        go test -v -tags=e2e ./tests/e2e/...
+        go test -v ./tests/e2e/...
       env:
-        TEST_ENDPOINT: http://localhost:8080
-        TEST_TIMEOUT: 600s
-    
-    - name: 📋 Collect Logs
-      if: failure()
-      run: |
-        cd examples/basic-app
-        docker compose logs > e2e-logs.txt
-    
-    - name: 📤 Upload Logs
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: e2e-logs-${{ github.run_id }}
-        path: examples/basic-app/e2e-logs.txt
-    
+        APP_URL: http://localhost:8080
+        REDIS_ADDR: localhost:6379
+
     - name: 🧹 Cleanup
       if: always()
       run: |
-        cd examples/basic-app
-        docker compose down -v
+        pkill -f e2e-app || true
+        docker rm -f redis || true
 
   lint:
     name: 🔍 Code Quality

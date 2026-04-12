@@ -45,6 +45,7 @@ examples/quickstart-app/quickstart-app
 examples/todo-api/todo-api
 
 # Test artifacts
+tests/e2e/testapp/e2e-app
 coverage.html
 coverage.out
 coverage-func.txt
