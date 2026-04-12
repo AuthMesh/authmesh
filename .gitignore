@@ -37,9 +37,12 @@ dist/
 build/
 
 # Example app binaries
-examples/*/basic-app
-examples/*/advanced-app
+examples/basic-app/app
+examples/quickstart-app/app
 examples/*/main
+examples/minimal-app/minimal-app
+examples/quickstart-app/quickstart-app
+examples/todo-api/todo-api
 
 # Test artifacts
 coverage.html
@@ -50,3 +53,4 @@ coverage-func.txt
 # Temporary files
 *.tmp
 *.temp
+examples/*/minimal-app

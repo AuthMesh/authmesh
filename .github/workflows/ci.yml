@@ -9,7 +9,7 @@ on:
 
 env:
   GO_VERSION: '1.24.2'
-  GOLANGCI_LINT_VERSION: 'v1.62'
+  GOLANGCI_LINT_VERSION: 'v1.64'
 
 permissions:
   contents: read
@@ -264,7 +264,7 @@ jobs:
         files: |
           **/*.md
           **/*.txt
-        config: .github/cspell.json
+        config_path: .github/cspell.json
 
     - name: 📋 Validate Doc Examples
       run: |

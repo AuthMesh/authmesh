@@ -8,13 +8,6 @@ on:
       - 'pkg/**'
       - 'examples/**'
       - '*.md'
-  pull_request:
-    branches: [ main, develop ]
-    paths:
-      - 'docs/**'
-      - 'pkg/**'
-      - 'examples/**'
-      - '*.md'
   workflow_dispatch:
 
 env:
@@ -72,7 +65,7 @@ jobs:
         files: |
           **/*.md
           **/*.txt
-        config: .github/cspell.json
+        config_path: .github/cspell.json
     
     - name: 📋 Validate Examples
       run: |

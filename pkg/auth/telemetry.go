@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -37,7 +38,10 @@ type TelemetryEvent struct {
 }
 
 // telemetryEvents stores events for JSON export
-var telemetryEvents []TelemetryEvent
+var (
+	telemetryEvents []TelemetryEvent
+	telemetryMu     sync.Mutex
+)
 
 // InitTelemetry initializes OpenTelemetry
 func InitTelemetry(serviceName, otelCollectorURL string) error {
@@ -146,7 +150,9 @@ func (t *Telemetry) RecordAuthRequest(ctx context.Context, tenantID, userID, rol
 		},
 	}
 
+	telemetryMu.Lock()
 	telemetryEvents = append(telemetryEvents, event)
+	telemetryMu.Unlock()
 
 	// Export to JSON file
 	go exportTelemetryToJSON()
@@ -154,6 +160,9 @@ func (t *Telemetry) RecordAuthRequest(ctx context.Context, tenantID, userID, rol
 
 // exportTelemetryToJSON exports telemetry events to a telemetry file
 func exportTelemetryToJSON() {
+	telemetryMu.Lock()
+	defer telemetryMu.Unlock()
+
 	if len(telemetryEvents) == 0 {
 		return
 	}
