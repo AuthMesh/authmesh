@@ -1,8 +1,8 @@
 {
-  "total": 45.6,
-  "timestamp": "2026-04-12T00:50:36Z",
+  "total": 45.7,
+  "timestamp": "2026-04-12T01:13:46Z",
   "branch": "init",
-  "commit": "09dd6e301119ca5f4323f6c69c84b390c830d11b",
+  "commit": "c764ee0962967d1abc222b60ea5513e783364e42",
   "packages": {
     "auth": 100.0,
     "keycloak": 0.0,
@@ -11,7 +11,7 @@
     "tlsutil": 79.2
   },
   "badges": {
-    "total": "https://img.shields.io/badge/coverage-45.6%25-yellow",
+    "total": "https://img.shields.io/badge/coverage-45.7%25-yellow",
     "auth": "https://img.shields.io/badge/auth-100.0%25-brightgreen",
     "keycloak": "https://img.shields.io/badge/keycloak-0.0%25-red",
     "middleware": "https://img.shields.io/badge/middleware-100.0%25-brightgreen",
