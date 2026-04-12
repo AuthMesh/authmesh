@@ -33,25 +33,19 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      
-      keycloak:
-        image: quay.io/keycloak/keycloak:23.0
-        ports:
-          - 8080:8080
-        env:
-          KEYCLOAK_ADMIN: admin
-          KEYCLOAK_ADMIN_PASSWORD: admin
-          KC_HTTP_ENABLED: "true"
-          KC_HOSTNAME_STRICT: "false"
-          KC_HEALTH_ENABLED: "true"
-        options: >-
-          --health-cmd "curl -sf http://localhost:8080/health/ready || exit 1"
-          --health-interval 30s
-          --health-timeout 10s
-          --health-retries 15
-          --health-start-period 120s
     
     steps:
+    - name: 🐳 Start Keycloak
+      run: |
+        docker run -d --name keycloak \
+          -p 8080:8080 \
+          -e KEYCLOAK_ADMIN=admin \
+          -e KEYCLOAK_ADMIN_PASSWORD=admin \
+          -e KC_HTTP_ENABLED=true \
+          -e KC_HOSTNAME_STRICT=false \
+          -e KC_HEALTH_ENABLED=true \
+          quay.io/keycloak/keycloak:26.0 start-dev
+
     - name: 📥 Checkout Code
       uses: actions/checkout@v4
       with:
@@ -99,12 +93,16 @@ jobs:
     
     - name: 🧪 Run Integration Tests
       run: |
-        # Wait for Keycloak to be fully ready (it's slow to start)
+        # Wait for Keycloak 26 to be fully ready
         echo "Waiting for Keycloak..."
-        for i in $(seq 1 30); do
+        for i in $(seq 1 60); do
           if curl -sf http://localhost:8080/health/ready > /dev/null 2>&1; then
-            echo "Keycloak ready after ${i}s"
+            echo "Keycloak ready after $((i*2))s"
             break
+          fi
+          if [ $i -eq 60 ]; then
+            echo "Keycloak failed to start, checking logs..."
+            docker logs keycloak 2>&1 | tail -20
           fi
           sleep 2
         done

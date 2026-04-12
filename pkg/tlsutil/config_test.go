@@ -89,7 +89,7 @@ func TestCreateSecureHTTPClient(t *testing.T) {
 
 		// Should still create a client but with secure defaults
 		assert.NotNil(t, client, "HTTP client should be created")
-		
+
 		transport, ok := client.Transport.(*http.Transport)
 		assert.True(t, ok, "Transport should be *http.Transport")
 
