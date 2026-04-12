@@ -37,6 +37,9 @@
       "pattern": "^https://your-keycloak.com"
     },
     {
+      "pattern": "^mailto:"
+    },
+    {
       "pattern": "^https://yourdomain.com"
     },
     {

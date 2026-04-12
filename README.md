@@ -562,7 +562,7 @@ Apache 2.0 License - see [LICENSE](LICENSE) for details.
 - 🔄 **[Migration Guide](docs/MIGRATION.md)** - Migrate from other auth systems
 - � **[API Reference](docs/API_REFERENCE.md)** - Complete API documentation
 - �🐛 **[Issue Tracker](https://github.com/AuthMesh/authmesh/issues)** - Bug reports and feature requests
-- 💬 **[Discussions](https://github.com/AuthMesh/authmesh/discussions)** - Community support
+- 💬 **[Community](https://github.com/AuthMesh/authmesh/issues)** - Questions and community support
 
 ---
 

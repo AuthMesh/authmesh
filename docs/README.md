@@ -28,7 +28,7 @@ Welcome to the AuthMesh documentation. This directory contains comprehensive gui
 - **[Main README](../README.md)** - Project overview and features
 - **[Examples](../examples/)** - Working code examples
 - **[GitHub Issues](https://github.com/AuthMesh/authmesh/issues)** - Bug reports and feature requests
-- **[GitHub Discussions](https://github.com/AuthMesh/authmesh/discussions)** - Community support
+- **[GitHub Issues](https://github.com/AuthMesh/authmesh/issues)** - Questions and community support
 
 ## 🔍 Document Overview
 
@@ -57,4 +57,4 @@ Found an issue or want to improve the docs?
 
 ---
 
-**Need immediate help?** Start with [QUICKSTART.md](QUICKSTART.md) or join our [community discussions](https://github.com/AuthMesh/authmesh/discussions).
+**Need immediate help?** Start with [QUICKSTART.md](QUICKSTART.md) or [open an issue](https://github.com/AuthMesh/authmesh/issues).

@@ -180,10 +180,10 @@ jobs:
         
         ## 🚀 Getting Started
         
-        - [Quick Start Guide](../docs/getting-started.md)
-        - [Configuration Reference](../docs/configuration.md)
-        - [Security Best Practices](../docs/security.md)
-        - [Performance Tuning](../docs/performance.md)
+        - [Quick Start Guide](../docs/QUICKSTART.md)
+        - [Configuration Reference](../docs/QUICKSTART.md)
+        - [Security Best Practices](../docs/SECURITY.md)
+        - [Performance Tuning](../docs/PERFORMANCE.md)
         
         ## 💡 Examples
         

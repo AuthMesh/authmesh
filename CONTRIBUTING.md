@@ -206,10 +206,10 @@ make release        # Create release (maintainers only)
 ## 📚 Resources
 
 ### Documentation
-- [Getting Started Guide](docs/getting-started.md)
-- [API Reference](docs/api/)
-- [Configuration Guide](docs/configuration.md)
-- [Security Best Practices](docs/security.md)
+- [Getting Started Guide](docs/QUICKSTART.md)
+- [API Reference](docs/API_REFERENCE.md)
+- [Configuration Guide](docs/QUICKSTART.md)
+- [Security Best Practices](docs/SECURITY.md)
 
 ### Community
 - **GitHub Discussions**: For questions and ideas
@@ -219,7 +219,7 @@ make release        # Create release (maintainers only)
 ### Learning
 - [Go Documentation](https://golang.org/doc/)
 - [JWT Best Practices](https://auth0.com/blog/a-look-at-the-latest-draft-for-jwt-bcp/)
-- [Multi-Tenant Architecture](https://docs.microsoft.com/en-us/azure/architecture/guide/multitenant/)
+- [Multi-Tenant Architecture](https://learn.microsoft.com/en-us/azure/architecture/guide/multitenant/overview)
 
 ## 🏆 Recognition
 

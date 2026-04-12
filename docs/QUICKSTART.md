@@ -217,4 +217,4 @@ config.RateLimit.BurstSize = 2000          // Allow bursts
 
 - 📖 [Full Documentation](../README.md)
 - 🐛 [Report Issues](https://github.com/AuthMesh/authmesh/issues)
-- 💬 [Community Discussion](https://github.com/AuthMesh/authmesh/discussions)
+- 💬 [Community Discussion](https://github.com/AuthMesh/authmesh/issues)

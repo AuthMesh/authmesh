@@ -190,7 +190,7 @@ jobs:
         ### 🌐 Online Reports
         - 📄 [**HTML Coverage Report**](https://authmesh.github.io/authmesh/coverage.html) - Visual coverage map
         - 📈 [**GitHub Actions Workflows**](https://github.com/AuthMesh/authmesh/actions) - CI/CD pipeline
-        - 🔍 [**Function-level Analysis**](https://github.com/AuthMesh/authmesh/blob/main/coverage-func.txt) - Detailed breakdown
+        - 🔍 **Function-level Analysis** - Run `make coverage-func` locally
         
         ### 💻 Local Development
         ```bash
@@ -251,7 +251,7 @@ jobs:
         
         **Coverage Philosophy:** We prioritize testing security-critical paths and public APIs first, ensuring that AuthMesh remains a trusted authentication library for production applications.
         
-        **Questions or suggestions for improving test coverage?** [Open an issue](https://github.com/AuthMesh/authmesh/issues) or start a [discussion](https://github.com/AuthMesh/authmesh/discussions).
+        **Questions or suggestions for improving test coverage?** [Open an issue](https://github.com/AuthMesh/authmesh/issues).
         EOF
         
     - name: Create coverage data JSON
