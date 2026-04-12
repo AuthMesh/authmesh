@@ -131,10 +131,22 @@ jobs:
     - name: 🚀 Start Test Environment
       run: |
         cd examples/basic-app
-        docker compose -f docker-compose.yml up -d
+        docker compose -f docker-compose.yml up -d --build
         
-        # Wait for services to be healthy
-        timeout 300 bash -c 'until docker compose ps | grep -q "healthy"; do sleep 5; done'
+        # Wait for the app service to be healthy
+        echo "Waiting for app to be ready..."
+        for i in $(seq 1 60); do
+          if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
+            echo "App ready after $((i*5))s"
+            break
+          fi
+          if [ $i -eq 60 ]; then
+            echo "App failed to start, checking logs..."
+            docker compose logs app 2>&1 | tail -30
+            exit 1
+          fi
+          sleep 5
+        done
     
     - name: 🧪 Run E2E Tests
       run: |

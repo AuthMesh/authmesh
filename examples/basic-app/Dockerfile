@@ -4,17 +4,17 @@ FROM golang:1.24-alpine AS builder
 WORKDIR /app
 
 # Copy go mod files
-COPY ../../go.mod ../../go.sum ./
+COPY go.mod go.sum ./
 
 # Download dependencies
 RUN go mod download
 
 # Copy source code
-COPY ../../pkg ./pkg
-COPY . .
+COPY pkg ./pkg
+COPY examples/basic-app ./examples/basic-app
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./examples/basic-app
 
 # Final stage
 FROM alpine:latest
