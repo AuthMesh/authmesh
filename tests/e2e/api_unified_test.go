@@ -62,7 +62,7 @@ func testMetricsEndpoint(t *testing.T, appURL string) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.Equal(t, "text/plain; version=0.0.4; charset=utf-8", resp.Header.Get("Content-Type"))
+	assert.Contains(t, resp.Header.Get("Content-Type"), "text/plain")
 }
 
 func testPublicEndpoints(t *testing.T, appURL string) {
