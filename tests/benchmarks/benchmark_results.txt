@@ -1,0 +1,73 @@
+goos: darwin
+goarch: amd64
+pkg: github.com/AuthMesh/authmesh/tests/benchmarks
+cpu: Intel(R) Core(TM) i5-1038NG7 CPU @ 2.00GHz
+BenchmarkPlatformSetup        	 2061582	       559.4 ns/op	     816 B/op	       6 allocs/op
+BenchmarkPlatformSetup        	 2071764	       640.6 ns/op	     816 B/op	       6 allocs/op
+BenchmarkPlatformSetup        	 2067000	       574.0 ns/op	     816 B/op	       6 allocs/op
+BenchmarkPlatformSetup-2      	 3000206	       397.9 ns/op	     816 B/op	       6 allocs/op
+BenchmarkPlatformSetup-2      	 2518566	       403.8 ns/op	     816 B/op	       6 allocs/op
+BenchmarkPlatformSetup-2      	 2796878	       448.9 ns/op	     816 B/op	       6 allocs/op
+BenchmarkPlatformSetup-4      	 3401745	       349.2 ns/op	     816 B/op	       6 allocs/op
+BenchmarkPlatformSetup-4      	 3427874	       361.3 ns/op	     816 B/op	       6 allocs/op
+BenchmarkPlatformSetup-4      	 3414640	       358.6 ns/op	     816 B/op	       6 allocs/op
+BenchmarkQuickStart           	 2085465	       555.5 ns/op	     816 B/op	       6 allocs/op
+BenchmarkQuickStart           	 2122171	       566.7 ns/op	     816 B/op	       6 allocs/op
+BenchmarkQuickStart           	 2115674	       561.6 ns/op	     816 B/op	       6 allocs/op
+BenchmarkQuickStart-2         	 2804760	       395.2 ns/op	     816 B/op	       6 allocs/op
+BenchmarkQuickStart-2         	 2895265	       419.7 ns/op	     816 B/op	       6 allocs/op
+BenchmarkQuickStart-2         	 2655876	       529.6 ns/op	     816 B/op	       6 allocs/op
+BenchmarkQuickStart-4         	 3183900	       414.1 ns/op	     816 B/op	       6 allocs/op
+BenchmarkQuickStart-4         	 2777864	       425.6 ns/op	     816 B/op	       6 allocs/op
+BenchmarkQuickStart-4         	 2984948	       368.3 ns/op	     816 B/op	       6 allocs/op
+BenchmarkMiddlewareSetup      	  160260	      7343 ns/op	    3312 B/op	      72 allocs/op
+BenchmarkMiddlewareSetup      	  161086	      7312 ns/op	    3312 B/op	      72 allocs/op
+BenchmarkMiddlewareSetup      	  150421	      7186 ns/op	    3312 B/op	      72 allocs/op
+BenchmarkMiddlewareSetup-2    	  197113	      5902 ns/op	    3313 B/op	      72 allocs/op
+BenchmarkMiddlewareSetup-2    	  197013	      5895 ns/op	    3313 B/op	      72 allocs/op
+BenchmarkMiddlewareSetup-2    	  201518	      5865 ns/op	    3313 B/op	      72 allocs/op
+BenchmarkMiddlewareSetup-4    	  197262	      5878 ns/op	    3365 B/op	      72 allocs/op
+BenchmarkMiddlewareSetup-4    	  198955	      5934 ns/op	    3361 B/op	      72 allocs/op
+BenchmarkMiddlewareSetup-4    	  192438	      6023 ns/op	    3366 B/op	      72 allocs/op
+BenchmarkUnifiedSetup         	  117234	     10012 ns/op	    4456 B/op	     113 allocs/op
+BenchmarkUnifiedSetup         	  115699	      9890 ns/op	    4456 B/op	     113 allocs/op
+BenchmarkUnifiedSetup         	  121706	      9649 ns/op	    4456 B/op	     113 allocs/op
+BenchmarkUnifiedSetup-2       	  145836	      7914 ns/op	    4459 B/op	     113 allocs/op
+BenchmarkUnifiedSetup-2       	  145760	      7932 ns/op	    4459 B/op	     113 allocs/op
+BenchmarkUnifiedSetup-2       	  146972	      8225 ns/op	    4457 B/op	     113 allocs/op
+BenchmarkUnifiedSetup-4       	  141838	      7444 ns/op	    4533 B/op	     113 allocs/op
+BenchmarkUnifiedSetup-4       	  147536	      7953 ns/op	    4524 B/op	     113 allocs/op
+BenchmarkUnifiedSetup-4       	  148720	      7919 ns/op	    4528 B/op	     113 allocs/op
+BenchmarkHTTPRequest          	    5274	    230647 ns/op	   23220 B/op	     210 allocs/op
+BenchmarkHTTPRequest          	    4666	    234737 ns/op	   23255 B/op	     210 allocs/op
+BenchmarkHTTPRequest          	    5466	    229237 ns/op	   23257 B/op	     210 allocs/op
+BenchmarkHTTPRequest-2        	--- FAIL: BenchmarkHTTPRequest-2
+    platform_bench_test.go:105: Get "http://127.0.0.1:59207/test": dial tcp 127.0.0.1:59207: connect: can't assign requested address
+    platform_bench_test.go:105: Get "http://127.0.0.1:59207/test": dial tcp 127.0.0.1:59207: connect: can't assign requested address
+BenchmarkHTTPRequest-2        	--- FAIL: BenchmarkHTTPRequest
+    platform_bench_test.go:105: Get "http://127.0.0.1:59207/test": dial tcp 127.0.0.1:59207: connect: can't assign requested address
+--- FAIL: BenchmarkHTTPRequest-2
+    platform_bench_test.go:105: Get "http://127.0.0.1:59207/test": dial tcp 127.0.0.1:59207: connect: can't assign requested address
+BenchmarkHTTPRequest-2        	--- FAIL: BenchmarkHTTPRequest-2
+    platform_bench_test.go:105: Get "http://127.0.0.1:59561/test": dial tcp 127.0.0.1:59561: connect: can't assign requested address
+    platform_bench_test.go:105: Get "http://127.0.0.1:59561/test": dial tcp 127.0.0.1:59561: connect: can't assign requested address
+BenchmarkHTTPRequest-4        	--- FAIL: BenchmarkHTTPRequest
+    platform_bench_test.go:105: Get "http://127.0.0.1:59569/test": dial tcp 127.0.0.1:59569: connect: can't assign requested address
+--- FAIL: BenchmarkHTTPRequest-4
+    platform_bench_test.go:105: Get "http://127.0.0.1:59569/test": dial tcp 127.0.0.1:59569: connect: can't assign requested address
+BenchmarkHTTPRequest-4        	--- FAIL: BenchmarkHTTPRequest
+    platform_bench_test.go:105: Get "http://127.0.0.1:59570/test": dial tcp 127.0.0.1:59570: connect: can't assign requested address
+--- FAIL: BenchmarkHTTPRequest-4
+    platform_bench_test.go:105: Get "http://127.0.0.1:59570/test": dial tcp 127.0.0.1:59570: connect: can't assign requested address
+BenchmarkHTTPRequest-4        	--- FAIL: BenchmarkHTTPRequest
+    platform_bench_test.go:105: Get "http://127.0.0.1:59595/test": dial tcp 127.0.0.1:59595: connect: can't assign requested address
+--- FAIL: BenchmarkHTTPRequest-4
+    platform_bench_test.go:105: Get "http://127.0.0.1:59595/test": dial tcp 127.0.0.1:59595: connect: can't assign requested address
+--- FAIL: BenchmarkHealthCheck
+    platform_bench_test.go:138: Get "http://127.0.0.1:59599/health": dial tcp 127.0.0.1:59599: connect: can't assign requested address
+BenchmarkPlatformShutdown     	  749822	      1464 ns/op	     272 B/op	       4 allocs/op
+BenchmarkPlatformShutdown     	  782156	      1461 ns/op	     272 B/op	       4 allocs/op
+BenchmarkPlatformShutdown     	  980457	      1257 ns/op	     272 B/op	       4 allocs/op
+BenchmarkPlatformShutdown-2   	  950320	      1426 ns/op	     272 B/op	       4 allocs/op
+BenchmarkPlatformShutdown-2   	  899426	      1494 ns/op	     272 B/op	       4 allocs/op
+BenchmarkPlatformShutdown-2   	

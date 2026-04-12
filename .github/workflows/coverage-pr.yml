@@ -1,0 +1,88 @@
+name: Coverage PR Update
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [ main, init ]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  coverage-check:
+    name: Coverage Check and PR Update
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+        
+    - name: Run coverage
+      run: |
+        go test -coverprofile=coverage.out ./pkg/...
+        COVERAGE=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | sed 's/%//')
+        echo "COVERAGE=$COVERAGE" >> $GITHUB_ENV
+        
+    - name: Coverage Report
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const coverage = '${{ env.COVERAGE }}';
+          const fs = require('fs');
+          
+          // Read coverage details
+          const { execSync } = require('child_process');
+          const coverageDetails = execSync('go tool cover -func=coverage.out').toString();
+          
+          const body = `## 📊 Code Coverage Report
+          
+          **Current Coverage: ${coverage}%**
+          
+          <details>
+          <summary>📈 Detailed Package Coverage</summary>
+          
+          \`\`\`
+          ${coverageDetails}
+          \`\`\`
+          
+          </details>
+          
+          ${parseFloat(coverage) < 15 ? 
+            '⚠️ **Coverage is below 15%** - Consider adding more tests' : 
+            '✅ **Good coverage!** Keep up the great work'
+          }
+          `;
+          
+          // Find existing coverage comment
+          const comments = await github.rest.issues.listComments({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+          });
+          
+          const coverageComment = comments.data.find(comment => 
+            comment.body.includes('📊 Code Coverage Report')
+          );
+          
+          if (coverageComment) {
+            // Update existing comment
+            await github.rest.issues.updateComment({
+              comment_id: coverageComment.id,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+          } else {
+            // Create new comment
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+          }

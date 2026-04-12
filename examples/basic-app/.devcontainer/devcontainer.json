@@ -1,0 +1,68 @@
+{
+    "name": "AuthMesh Basic Example",
+    "dockerComposeFile": ["../docker-compose.yml"],
+    "service": "app",
+    "workspaceFolder": "/workspace",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "golang.go",
+                "ms-vscode.vscode-json",
+                "redhat.vscode-yaml",
+                "ms-vscode-remote.remote-containers",
+                "github.copilot",
+                "ms-azuretools.vscode-docker"
+            ],
+            "settings": {
+                "go.gopath": "/go",
+                "go.useLanguageServer": true,
+                "go.alternateTools": {
+                    "go": "/usr/local/go/bin/go"
+                },
+                "go.lintTool": "golangci-lint",
+                "go.formatTool": "goimports",
+                "terminal.integrated.shell.linux": "/bin/bash",
+                "files.associations": {
+                    "*.yaml": "yaml",
+                    "*.yml": "yaml"
+                }
+            }
+        }
+    },
+    "features": {
+        "ghcr.io/devcontainers/features/go:1": {
+            "version": "1.24"
+        },
+        "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+        "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {}
+    },
+    "forwardPorts": [8080, 9443, 6379, 9090, 3000, 16686],
+    "portsAttributes": {
+        "8080": {
+            "label": "AuthMesh App",
+            "onAutoForward": "notify"
+        },
+        "9443": {
+            "label": "Keycloak",
+            "onAutoForward": "silent"
+        },
+        "6379": {
+            "label": "Redis",
+            "onAutoForward": "silent"
+        },
+        "9090": {
+            "label": "Prometheus",
+            "onAutoForward": "silent"
+        },
+        "3000": {
+            "label": "Grafana",
+            "onAutoForward": "silent"
+        },
+        "16686": {
+            "label": "Jaeger UI",
+            "onAutoForward": "silent"
+        }
+    },
+    "postCreateCommand": "go mod download && go install github.com/cosmtrek/air@latest",
+    "remoteUser": "vscode"
+}

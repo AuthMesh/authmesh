@@ -1,0 +1,21 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck
+    - staticcheck
+    - unused
+    - govet
+  exclusions:
+    paths:
+      - examples
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+      - path: tests/
+        linters:
+          - errcheck
+      - text: "QF1003"
+        linters:
+          - staticcheck
