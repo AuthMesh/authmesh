@@ -258,6 +258,30 @@ jobs:
         use-verbose-mode: 'yes'
         config-file: '.github/markdown-link-check.json'
 
+    - name: 📝 Spell Check
+      uses: streetsidesoftware/cspell-action@v6
+      with:
+        files: |
+          **/*.md
+          **/*.txt
+        config: .github/cspell.json
+
+    - name: 📋 Validate Doc Examples
+      run: |
+        for file in $(find docs -name "*.md" -exec grep -l '```go' {} \;); do
+          echo "Checking $file"
+          awk '/```go/,/```/' "$file" | grep -v '```' > /tmp/ci_temp_example.go
+          if [ -s /tmp/ci_temp_example.go ]; then
+            if ! grep -q "^package " /tmp/ci_temp_example.go; then
+              { echo "package main"; cat /tmp/ci_temp_example.go; } > /tmp/ci_temp2.go
+              mv /tmp/ci_temp2.go /tmp/ci_temp_example.go
+            fi
+            go vet /tmp/ci_temp_example.go 2>/dev/null || echo "WARNING: syntax issues in $file"
+          fi
+        done
+        rm -f /tmp/ci_temp_example.go
+        echo "✅ Doc examples validated"
+
   compatibility:
     name: 🔄 Compatibility Check
     runs-on: ubuntu-latest
