@@ -271,7 +271,7 @@ jobs:
       run: |
         for file in $(find docs -name "*.md" -exec grep -l '```go' {} \;); do
           echo "Checking $file"
-          awk '/```go/,/```/' "$file" | grep -v '```' > /tmp/ci_temp_example.go
+          awk '/```go/,/^```$/' "$file" | grep -v '```' > /tmp/ci_temp_example.go || true
           if [ -s /tmp/ci_temp_example.go ]; then
             if ! grep -q "^package " /tmp/ci_temp_example.go; then
               { echo "package main"; cat /tmp/ci_temp_example.go; } > /tmp/ci_temp2.go
