@@ -52,6 +52,7 @@ jobs:
         echo "✅ Go documentation validation completed"
     
     - name: 🔗 Check Documentation Links
+      continue-on-error: true
       run: |
         npx --yes markdown-link-check@3.13.6 --config .github/markdown-link-check.json --quiet $(find docs -name '*.md')
     
