@@ -260,11 +260,8 @@ jobs:
         echo "✅ Go documentation is valid"
     
     - name: 🔗 Check Links
-      uses: gaurav-nelson/github-action-markdown-link-check@v1
-      with:
-        use-quiet-mode: 'yes'
-        use-verbose-mode: 'yes'
-        config-file: '.github/markdown-link-check.json'
+      run: |
+        npx --yes markdown-link-check@3.13.6 --config .github/markdown-link-check.json --quiet $(find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*')
 
     - name: 📝 Spell Check
       run: npx --yes cspell@8.19.4 lint --config .github/cspell.json "**/*.md" "**/*.txt" --no-progress

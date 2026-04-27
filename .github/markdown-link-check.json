@@ -67,20 +67,8 @@
       "pattern": "^http://jaeger:"
     }
   ],
-  "httpStatusCodes": [
-    200,
-    201,
-    202,
-    204,
-    301,
-    302,
-    307,
-    308,
-    401,
-    403
-  ],
   "timeout": "20s",
   "retryCount": 3,
   "retryOn429": true,
-  "aliveStatusCodes": [200, 206]
+  "aliveStatusCodes": [200, 206, 301, 302, 307, 308, 403]
 }
