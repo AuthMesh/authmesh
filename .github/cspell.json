@@ -85,7 +85,9 @@
     "struct",
     "ratelimit",
     "pprof",
-    "quickstart"
+    "quickstart",
+    "SARIF",
+    "sarif"
   ],
   "flagWords": [],
   "ignorePaths": [
